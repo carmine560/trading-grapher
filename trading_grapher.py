@@ -7,6 +7,9 @@ import os
 import re
 import sys
 
+from yahoo_finance_api2 import share
+from yahoo_finance_api2.exceptions import YahooFinanceError
+import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
@@ -15,63 +18,48 @@ trading_directory = os.path.normpath(os.path.join(os.path.expanduser('~'),
                                                   # TODO: add option
                                                   # '2022-12-14'
                                                   ))
-
 journal = pd.read_excel(
     os.path.normpath(os.path.join(trading_directory, 'Trading.ods')),
     sheet_name='Trading Journal')
 
-UP = 'limegreen'
-UP = 'darkturquoise'
-UP = 'lightseagreen'
-UP = 'turquoise'
-UP = 'mediumturquoise'
-UP = 'mediumaquamarine'
-UP = 'mediumseagreen'
-UP = 'mediumspringgreen'
-DOWN = 'salmon'
-DOWN = 'crimson'
-DOWN = 'deeppink'
-DOWN = 'tomato'
-DOWN = 'mediumvioletred'
-DOWN = 'lightcoral'
-DOWN = 'palevioletred'
-DOWN = 'hotpink'
-YELLOW = 'gold'
-YELLOW = 'orange'
-YELLOW = 'sandybrown'
-YELLOW = 'goldenrod'
-YELLOW = 'lightsalmon'
-YELLOW = 'tan'
-YELLOW = 'khaki'
-YELLOW = 'darkgoldenrod'
-YELLOW = 'dodgerblue'
-YELLOW = 'darkkhaki'
-YELLOW = 'peru'
-YELLOW = 'rosybrown'
-YELLOW = 'darksalmon'
-BLUE = 'royalblue'
-BLUE = 'cornflowerblue'
-MAGENTA = 'magenta'
-MAGENTA = 'violet'
-MAGENTA = 'silver'
-MAGENTA = 'darkgray'
-MAGENTA = 'gray'
-MAGENTA = 'orchid'
-MAGENTA = 'mediumorchid'
-MAGENTA = 'mediumpurple'
-MAGENTA = 'mediumslateblue'
-MAGENTA = 'darkorchid'
-MAGENTA = 'rebeccapurple'
-ENTRY_COLOR = 'lightgray'
-EXIT_COLOR_P = 'lightgreen'
-EXIT_COLOR_P = 'palegreen'
-EXIT_COLOR_P = 'greenyellow'
-EXIT_COLOR_P = UP
-EXIT_COLOR_L = 'lightpink'
-EXIT_COLOR_L = 'pink'
-EXIT_COLOR_L = 'lightcoral'
-EXIT_COLOR_L = DOWN
-TOOLTIP = 'black'
+is_dark_theme = False
+is_dark_theme = True
+
+if is_dark_theme:
+    face_color = '#242424'
+    figure_color = '#242424'
+    grid_color = '#3d3d3d'
+    edge_color = '#999999'
+    tick_color = '#999999'
+    label_color = '#999999'
+    up_color = 'mediumspringgreen'
+    down_color = 'hotpink'
+    primary_color = 'darksalmon'
+    secondary_color = 'cornflowerblue'
+    tertiary_color = 'rebeccapurple'
+    tooltip_color = 'black'
+    neutral_color = 'lightgray'
+    profit_color = up_color
+    loss_color = down_color
+    text_color = '#f6f3e8'
+else:
+    face_color = '#fafafa'
+    figure_color = 'white'
+    grid_color = '#d0d0d0'
+    edge_color = '#f0f0f0'
+    tick_color = '#101010'
+    label_color = '#101010'
+    up_color = '#00b060'
+    down_color = '#fe3032'
+    primary_color = '#ff7f0e'
+    secondary_color = '#1f77b4'
+    tertiary_color = '#e377c2'
+    tooltip_color = 'white'
+    neutral_color = 'black'
+    profit_color = up_color
+    loss_color = down_color
+    text_color = 'black'
+
 
 def main():
     """
@@ -160,9 +148,6 @@ def save_market_data(entry_date, number, symbol, exit_time):
             < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        from yahoo_finance_api2 import share
-        from yahoo_finance_api2.exceptions import YahooFinanceError
-
         my_share = share.Share(f'{symbol}.T')
         try:
             symbol_data = my_share.get_historical(
@@ -252,13 +237,8 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         print(market_data, 'does not exist')
         sys.exit(1)
 
-    import mplfinance as mpf
-
     entry_timestamp = exit_timestamp = None
-    # TODO: theme
-    entry_color = 'k'
-    entry_color = 'C7'
-    entry_color = ENTRY_COLOR
+    entry_color = neutral_color
     addplot = []
     hlines = []
     colors = []
@@ -300,17 +280,10 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
             result = exit_price - entry_price
         elif trade_type == 'short':
             result = entry_price - exit_price
-        # TODO: theme
         if result > 0:
-            exit_color = 'g'
-            exit_color = 'C2'
-            exit_color = 'lightgreen'
-            exit_color = EXIT_COLOR_P
+            exit_color = profit_color
         elif result < 0:
-            exit_color = 'r'
-            exit_color = 'C3'
-            exit_color = 'lightpink'
-            exit_color = EXIT_COLOR_L
+            exit_color = loss_color
 
         formalized['exit_point'] = pd.Series(dtype='float')
         exit_date = exit_date.tz_localize('Asia/Tokyo')
@@ -336,46 +309,30 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
     panel = add_macd(formalized, panel, mpf, addplot)
     panel = stoch_panel = add_stoch(formalized, panel, mpf, addplot)
 
-    # TODO: customize style
+    # TODO: base_mpl_style
     style = {'base_mpl_style': 'dark_background',
-             # 'marketcolors': {'candle': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'edge': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'wick': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'ohlc': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'volume': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'vcedge': {'up': '#95e454', 'down': '#e5786d'},
-             #                  'vcdopcod': None,
-             #                  'alpha': None},
-             # 'marketcolors': {'candle': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'edge': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'wick': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'ohlc': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'volume': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'vcedge': {'up': '#00b060', 'down': '#fe3032'},
-             #                  'vcdopcod': None,
-             #                  'alpha': None},
-             'marketcolors': {'candle': {'up': UP, 'down': DOWN},
-                              'edge': {'up': UP, 'down': DOWN},
-                              'wick': {'up': UP, 'down': DOWN},
-                              'ohlc': {'up': UP, 'down': DOWN},
-                              'volume': {'up': UP, 'down': DOWN},
-                              'vcedge': {'up': UP, 'down': DOWN},
+             'marketcolors': {'candle': {'up': up_color, 'down': down_color},
+                              'edge': {'up': up_color, 'down': down_color},
+                              'wick': {'up': up_color, 'down': down_color},
+                              'ohlc': {'up': up_color, 'down': down_color},
+                              'volume': {'up': up_color, 'down': down_color},
+                              'vcedge': {'up': up_color, 'down': down_color},
                               'vcdopcod': None,
                               'alpha': None},
              'mavcolors': None,
-             'facecolor': '#242424',
-             'figcolor': '#242424',
-             'gridcolor': '#3d3d3d',
+             'facecolor': face_color,
+             'figcolor': figure_color,
+             'gridcolor': grid_color,
              'gridstyle': '-',
              'y_on_right': None,
              # TODO: minor
-             'rc': {'axes.edgecolor': '#999999',
-                    'axes.labelcolor': '#999999',
+             'rc': {'axes.edgecolor': edge_color,
+                    'axes.labelcolor': label_color,
                     'figure.titlesize': 'x-large',
                     'figure.titleweight': 'semibold',
-                    'text.color': '#f6f3e8',
-                    'xtick.color': '#999999',
-                    'ytick.color': '#999999'}}
+                    'text.color': text_color,
+                    'xtick.color': tick_color,
+                    'ytick.color': tick_color}}
 
     panel += 1
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
@@ -462,13 +419,9 @@ def add_ma(formalized, mpf, addplot, ma='ema'):
         ma_2 = ema(formalized.close, 25)
         ma_3 = ema(formalized.close, 75)
 
-    # TODO: theme
-    # ma_apd = [mpf.make_addplot(ma_1, color='C1', width=0.8),
-    #           mpf.make_addplot(ma_2, color='C0', width=0.8),
-    #           mpf.make_addplot(ma_3, color='C6', width=0.8)]
-    ma_apd = [mpf.make_addplot(ma_1, color=YELLOW, width=0.8),
-              mpf.make_addplot(ma_2, color=BLUE, width=0.8),
-              mpf.make_addplot(ma_3, color=MAGENTA, width=0.8)]
+    ma_apd = [mpf.make_addplot(ma_1, color=primary_color, width=0.8),
+              mpf.make_addplot(ma_2, color=secondary_color, width=0.8),
+              mpf.make_addplot(ma_3, color=tertiary_color, width=0.8)]
     addplot.extend(ma_apd)
 
 
@@ -504,19 +457,12 @@ def add_macd(formalized, panel, mpf, addplot, ma='ema'):
     signal = macd.ewm(span=9).mean()
     histogram = macd - signal
     panel += 1
-    # TODO: theme
-    # macd_apd = [mpf.make_addplot(macd, panel=panel, color='C1', width=0.8,
-    #                              ylabel=ylabel),
-    #             mpf.make_addplot(signal, panel=panel, color='C0', width=0.8,
-    #                              secondary_y=False),
-    #             mpf.make_addplot(histogram, type='bar', width=1.0,
-    #                              panel=panel, color='C7', secondary_y=False)]
-    macd_apd = [mpf.make_addplot(macd, panel=panel, color=YELLOW, width=0.8,
-                                 ylabel=ylabel),
-                mpf.make_addplot(signal, panel=panel, color=BLUE, width=0.8,
-                                 secondary_y=False),
-                mpf.make_addplot(histogram, type='bar', width=1.0,
-                                 panel=panel, color=MAGENTA, secondary_y=False)]
+    macd_apd = [mpf.make_addplot(macd, panel=panel, color=primary_color,
+                                 width=0.8, ylabel=ylabel),
+                mpf.make_addplot(signal, panel=panel, color=secondary_color,
+                                 width=0.8, secondary_y=False),
+                mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
+                                 color=tertiary_color, secondary_y=False)]
     addplot.extend(macd_apd)
     return panel
 
@@ -599,15 +545,12 @@ def add_stoch(formalized, panel, mpf, addplot):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
-    # TODO: theme
-    # stoch_apd = [mpf.make_addplot(formalized.k, panel=panel, color='C1',
-    #                               width=0.8, ylabel='Stochastics'),
-    #              mpf.make_addplot(formalized.d, panel=panel, color='C0',
-    #                               width=0.8, secondary_y=False)]
-    stoch_apd = [mpf.make_addplot(formalized.k, panel=panel, color=YELLOW,
-                                  width=0.8, ylabel='Stochastics'),
-                 mpf.make_addplot(formalized.d, panel=panel, color=BLUE,
-                                  width=0.8, secondary_y=False)]
+    stoch_apd = [mpf.make_addplot(formalized.k, panel=panel,
+                                  color=primary_color, width=0.8,
+                                  ylabel='Stochastics'),
+                 mpf.make_addplot(formalized.d, panel=panel,
+                                  color=secondary_color, width=0.8,
+                                  secondary_y=False)]
     addplot.extend(stoch_apd)
     return panel
 
@@ -696,30 +639,17 @@ def add_tooltips(axlist, price, s, color,
     """
     tooltip_foreground_alpha = 0.8
     tooltip_background_alpha = 0.6
-    # TODO: theme
-    # axlist[0].text(-1.2, price, s, alpha=tooltip_foreground_alpha, c='white',
-    #                size='small', ha='right', va='center',
-    #                bbox=dict(boxstyle='round, pad=0.2',
-    #                          alpha=tooltip_background_alpha, ec='none',
-    #                          fc=color))
-    axlist[0].text(-1.2, price, s, alpha=tooltip_foreground_alpha, c=TOOLTIP,
-                   size='small', ha='right', va='center',
+    axlist[0].text(-1.2, price, s, alpha=tooltip_foreground_alpha,
+                   c=tooltip_color, size='small', ha='right', va='center',
                    bbox=dict(boxstyle='round, pad=0.2',
                              alpha=tooltip_background_alpha, ec='none',
                              fc=color))
     if timestamp:
         bottom, top = axlist[last_primary_axis].get_ylim()
-        # TODO: theme
-        # axlist[last_primary_axis].text(
-        #     formalized.index.get_loc(timestamp), -0.03 * (top - bottom),
-        #     timestamp.strftime('%H:%M'), alpha=tooltip_foreground_alpha,
-        #     c='white', size='small', ha='center', va='top',
-        #     bbox=dict(boxstyle='round, pad=0.2',
-        #               alpha=tooltip_background_alpha, ec='none', fc=color))
         axlist[last_primary_axis].text(
             formalized.index.get_loc(timestamp), -0.03 * (top - bottom),
             timestamp.strftime('%H:%M'), alpha=tooltip_foreground_alpha,
-            c=TOOLTIP, size='small', ha='center', va='top',
+            c=tooltip_color, size='small', ha='center', va='top',
             bbox=dict(boxstyle='round, pad=0.2',
                       alpha=tooltip_background_alpha, ec='none', fc=color))
 
