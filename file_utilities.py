@@ -234,6 +234,30 @@ def decrypt_extract_file(source, output_directory):
                 sys.exit(1)
 
 
+def get_config_path(script_path):
+    """
+    Get the path to the configuration file.
+
+    Args:
+        script_path (str): The path to the script.
+
+    Returns:
+        str: The path to the configuration file.
+    """
+    script_directory = os.path.basename(os.path.dirname(os.path.abspath(
+        script_path)))
+    config_file = os.path.splitext(os.path.basename(script_path))[0] + '.ini'
+    if os.name == 'nt':
+        return os.path.join(os.path.expandvars('%LOCALAPPDATA%'),
+                            script_directory, config_file)
+    else:
+        if 'XDG_CONFIG_HOME' in os.environ:
+            return os.path.join(os.path.expandvars('$XDG_CONFIG_HOME'),
+                                script_directory, config_file)
+        return os.path.join(os.path.expanduser('~/.config'), script_directory,
+                            config_file)
+
+
 def is_writing(path):
     """
     Determine if a file at the path is currently being written to.
@@ -438,11 +462,6 @@ def create_icon(base, icon_directory=None):
             will be saved. If not provided, the icon is saved in the
             same directory as the script. Defaults to None.
 
-    Raises:
-        RuntimeError: If there is a Windows import error.
-        ValueError: If the acronym could not be created from the base
-            name.
-
     Returns:
         str: The path to the created icon.
     """
@@ -463,8 +482,7 @@ def create_icon(base, icon_directory=None):
                 variation to use. Defaults to an empty string.
 
         Returns:
-            ImageFont.FreeTypeFont: A font object with the scaled font
-                size.
+            FreeTypeFont: A font object with the scaled font size.
         """
         temp_font_size = 100
         temp_font = ImageFont.truetype(font_path, temp_font_size)
