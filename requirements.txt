@@ -1,0 +1,5 @@
+mplfinance
+numpy
+odfpy
+pandas
+yahoo_finance_api2
