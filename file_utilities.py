@@ -118,7 +118,7 @@ def backup_file(source, backup_directory=None, number_of_backups=-1,
             backups = sorted(
                 [f for f in os.listdir(backup_directory)
                  if re.fullmatch(
-                    fr'{source_base}-\d{{8}}T\d{{6}}{source_suffix}', f)])
+                         fr'{source_base}-\d{{8}}T\d{{6}}{source_suffix}', f)])
 
             if not os.path.exists(backup):
                 should_copy = True
@@ -234,12 +234,14 @@ def decrypt_extract_file(source, output_directory):
                 sys.exit(1)
 
 
-def get_config_path(script_path):
+def get_config_path(script_path, can_create_directory=True):
     """
     Get the path to the configuration file.
 
     Args:
         script_path (str): The path to the script.
+        can_create_directory (bool, optional): If True, create the
+            directory if it doesn't exist. Defaults to True.
 
     Returns:
         str: The path to the configuration file.
@@ -247,15 +249,22 @@ def get_config_path(script_path):
     script_directory = os.path.basename(os.path.dirname(os.path.abspath(
         script_path)))
     config_file = os.path.splitext(os.path.basename(script_path))[0] + '.ini'
+
     if os.name == 'nt':
-        return os.path.join(os.path.expandvars('%LOCALAPPDATA%'),
-                            script_directory, config_file)
+        config_path = os.path.join(os.path.expandvars('%LOCALAPPDATA%'),
+                                   script_directory, config_file)
     else:
         if 'XDG_CONFIG_HOME' in os.environ:
-            return os.path.join(os.path.expandvars('$XDG_CONFIG_HOME'),
-                                script_directory, config_file)
-        return os.path.join(os.path.expanduser('~/.config'), script_directory,
-                            config_file)
+            config_path = os.path.join(os.path.expandvars('$XDG_CONFIG_HOME'),
+                                       script_directory, config_file)
+
+        config_path = os.path.join(os.path.expanduser('~/.config'),
+                                   script_directory, config_file)
+
+    if can_create_directory:
+        check_directory(os.path.dirname(config_path))
+
+    return config_path
 
 
 def is_writing(path):
@@ -304,14 +313,14 @@ def select_executable(executables):
     Find the first available executable from a list of executables.
 
     This function iterates over a list of executable names, and returns
-    the path of the first executable that is found in the system's PATH.
+    the path to the first executable that is found in the system's PATH.
     If none of the executables are found, it returns False.
 
     Args:
         executables (list): A list of executable names to search for.
 
     Returns:
-        str or bool: The path of the first found executable, or False if
+        str or bool: The path to the first found executable, or False if
             none are found.
     """
     for executable in executables:

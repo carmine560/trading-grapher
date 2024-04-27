@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-"""Analyze trades and visualize data with charts and technical indicators."""
+"""Visualize trading data using charts and technical indicators."""
 
 import argparse
+import configparser
 import os
 import re
 import sys
@@ -13,52 +14,8 @@ import mplfinance as mpf
 import numpy as np
 import pandas as pd
 
-trading_directory = os.path.normpath(os.path.join(os.path.expanduser('~'),
-                                                  'Dropbox/Documents/Trading',
-                                                  # TODO: add option
-                                                  # '2022-12-14'
-                                                  ))
-journal = pd.read_excel(
-    os.path.normpath(os.path.join(trading_directory, 'Trading.ods')),
-    sheet_name='Trading Journal')
-
-is_dark_theme = False
-is_dark_theme = True
-
-if is_dark_theme:
-    face_color = '#242424'
-    figure_color = '#242424'
-    grid_color = '#3d3d3d'
-    edge_color = '#999999'
-    tick_color = '#999999'
-    label_color = '#999999'
-    up_color = 'mediumspringgreen'
-    down_color = 'hotpink'
-    primary_color = 'darksalmon'
-    secondary_color = 'cornflowerblue'
-    tertiary_color = 'rebeccapurple'
-    tooltip_color = 'black'
-    neutral_color = 'lightgray'
-    profit_color = up_color
-    loss_color = down_color
-    text_color = '#f6f3e8'
-else:
-    face_color = '#fafafa'
-    figure_color = 'white'
-    grid_color = '#d0d0d0'
-    edge_color = '#f0f0f0'
-    tick_color = '#101010'
-    label_color = '#101010'
-    up_color = '#00b060'
-    down_color = '#fe3032'
-    primary_color = '#ff7f0e'
-    secondary_color = '#1f77b4'
-    tertiary_color = '#e377c2'
-    tooltip_color = 'white'
-    neutral_color = 'black'
-    profit_color = up_color
-    loss_color = down_color
-    text_color = 'black'
+import configuration
+import file_utilities
 
 
 def main():
@@ -76,11 +33,18 @@ def main():
                         help='specify dates')
     args = parser.parse_args()
 
+    config = configure(file_utilities.get_config_path(__file__))
+    trading_journal = pd.read_excel(
+        config['General']['trading_path'],
+        sheet_name=config['General']['trading_sheet'])
+
     for date in pd.to_datetime(args.dates):
-        trades = journal.loc[journal.Date == date]
+        trades = trading_journal.loc[trading_journal.Date == date]
         for index, row in trades.iterrows():
-            save_market_data(row.Date, row['#'], row.SYM, row['Time.1'])
-            plot_chart(row.Date, row['#'], row.Time, row.SYM, row.Type,
+            # TODO: configure column names
+            save_market_data(config, row.Date, row['#'], row.SYM,
+                             row['Time.1'])
+            plot_chart(config, row.Date, row['#'], row.Time, row.SYM, row.Type,
                        row.Entry, row.Tactic, row.Reason, row['Date.1'],
                        row['Time.1'], row.Exit, row['Reason.1'], row['%Δ'],
                        row['Error 1'], row['Error 2'], row['Error 3'],
@@ -88,10 +52,78 @@ def main():
                        row['Error 7'], row['Error 8'], row['Error 9'],
                        row['Error 10'])
 
-    check_charts()
+    check_charts(config)
 
 
-def get_variables(symbol, entry_date, number):
+def configure(config_path, can_interpolate=True):
+    """
+    Get the configuration parser object with the set up configuration.
+
+    Args:
+        config_path (str): The path to the configuration file.
+        can_interpolate (bool, optional): If True, enable interpolation.
+            Defaults to True.
+
+    Returns:
+        ConfigParser: The configuration parser object.
+    """
+    if can_interpolate:
+        config = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation())
+    else:
+        config = configparser.ConfigParser()
+
+    config['General'] = {
+        # TODO: add option '2022-12-14'
+        'trading_directory':
+        os.path.join(os.path.expanduser('~'), 'Dropbox/Documents/Trading'),
+        'trading_path': os.path.join('${trading_directory}', 'Trading.ods'),
+        'trading_sheet': 'Trading Journal',
+        'theme': 'Dark'}
+    config['Dark'] = {
+        'face_color': '#242424',
+        'figure_color': '#242424',
+        'grid_color': '#3d3d3d',
+        'edge_color': '#999999',
+        'tick_color': '#999999',
+        'label_color': '#999999',
+        'up_color': 'mediumspringgreen',
+        'down_color': 'hotpink',
+        'primary_color': 'darksalmon',
+        'secondary_color': 'cornflowerblue',
+        'tertiary_color': 'rebeccapurple',
+        'tooltip_color': 'black',
+        'neutral_color': 'lightgray',
+        'profit_color': '${up_color}',
+        'loss_color': '${down_color}',
+        'text_color': '#f6f3e8'}
+    config['Light'] = {
+        'face_color': '#fafafa',
+        'figure_color': 'white',
+        'grid_color': '#d0d0d0',
+        'edge_color': '#f0f0f0',
+        'tick_color': '#101010',
+        'label_color': '#101010',
+        'up_color': '#00b060',
+        'down_color': '#fe3032',
+        'primary_color': '#ff7f0e',
+        'secondary_color': '#1f77b4',
+        'tertiary_color': '#e377c2',
+        'tooltip_color': 'white',
+        'neutral_color': 'black',
+        'profit_color': '${up_color}',
+        'loss_color': '${down_color}',
+        'text_color': 'black'}
+
+    if os.path.exists(config_path):
+        config.read(config_path)
+    else:
+        configuration.write_config(config, config_path)
+
+    return config
+
+
+def get_variables(config, symbol, entry_date, number):
     """
     Generate base string, market data path, and localize entry date.
 
@@ -100,6 +132,7 @@ def get_variables(symbol, entry_date, number):
     file and localizes the entry date to 'Asia/Tokyo' timezone.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         symbol (str): The trading symbol.
         entry_date (datetime): The date of the trade entry.
         number (int): The number of the trade.
@@ -109,14 +142,16 @@ def get_variables(symbol, entry_date, number):
             market data, and the localized entry date.
     """
     base = f"{entry_date.strftime('%Y-%m-%d')}-{int(number):02}-{symbol}"
-    market_data = os.path.normpath(os.path.join(
-        trading_directory,
-        f"{entry_date.strftime('%Y-%m-%d')}-00-{symbol}.csv"))
+    market_data = os.path.join(
+        config['General']['trading_directory'],
+        f"{entry_date.strftime('%Y-%m-%d')}-00-{symbol}.csv")
+    # TODO: customize time_zone
     entry_date = entry_date.tz_localize('Asia/Tokyo')
+
     return base, market_data, entry_date
 
 
-def save_market_data(entry_date, number, symbol, exit_time):
+def save_market_data(config, entry_date, number, symbol, exit_time):
     """
     Save the market data for a given symbol to a CSV file.
 
@@ -127,15 +162,18 @@ def save_market_data(entry_date, number, symbol, exit_time):
     data if necessary.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         entry_date (datetime): The date of the trade entry.
         number (int): The number of the trade.
         symbol (str): The trading symbol.
         exit_time (time): The time of the trade exit.
     """
     PERIOD_IN_DAYS = 7
-    _, market_data, entry_date = get_variables(symbol, entry_date, number)
+    _, market_data, entry_date = get_variables(config, symbol, entry_date,
+                                               number)
     delta = pd.Timestamp.now(tz='Asia/Tokyo').normalize() - entry_date
     last = modified_time = pd.Timestamp(0, tz='Asia/Tokyo')
+
     if os.path.exists(market_data):
         formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
         last = formalized.tail(1).index[0]
@@ -145,7 +183,7 @@ def save_market_data(entry_date, number, symbol, exit_time):
     if (PERIOD_IN_DAYS <= 1 + delta.days
         or last + pd.Timedelta(minutes=30) < modified_time
         or pd.Timestamp.now(tz='Asia/Tokyo')
-            < modified_time + pd.Timedelta(minutes=1)):
+        < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
         my_share = share.Share(f'{symbol}.T')
@@ -184,6 +222,7 @@ def save_market_data(entry_date, number, symbol, exit_time):
         formalized.index.name = 'timestamp'
         formalized = formalized.astype('float')
         formalized.update(df)
+
         if morning and len(previous):
             start = previous_date + pd.Timedelta(hours=15)
             end = entry_date + pd.Timedelta(hours=8, minutes=59)
@@ -199,10 +238,10 @@ def save_market_data(entry_date, number, symbol, exit_time):
         formalized.to_csv(market_data)
 
 
-def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
-               tactic, entry_reason, exit_date, exit_time, exit_price,
-               exit_reason, change, error_1, error_2, error_3, error_4,
-               error_5, error_6, error_7, error_8, error_9, error_10):
+def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
+               entry_price, tactic, entry_reason, exit_date, exit_time,
+               exit_price, exit_reason, change, error_1, error_2, error_3,
+               error_4, error_5, error_6, error_7, error_8, error_9, error_10):
     """
     Plot a trading chart with entry and exit points, and indicators.
 
@@ -212,6 +251,7 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
     any errors.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         entry_date (datetime): The date of the trade entry.
         number (int): The number of the trade.
         entry_time (str): The time of the trade entry.
@@ -230,7 +270,10 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         error_8, error_9, error_10 (str): The potential errors in the
             trade.
     """
-    base, market_data, entry_date = get_variables(symbol, entry_date, number)
+    base, market_data, entry_date = get_variables(config, symbol, entry_date,
+                                                  number)
+    theme = config[config['General']['theme']]
+
     if os.path.exists(market_data):
         formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
     else:
@@ -238,7 +281,7 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         sys.exit(1)
 
     entry_timestamp = exit_timestamp = None
-    entry_color = neutral_color
+    entry_color = theme['neutral_color']
     addplot = []
     hlines = []
     colors = []
@@ -247,6 +290,7 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
     previous_close = 0.0
     current = formalized[formalized.index >= entry_date]
     current_open = 0.0
+
     if len(previous.dropna()):
         previous_close = previous.dropna().tail(1).close.iloc[0]
         current_open = current.dropna().head(1).open.iloc[0]
@@ -281,9 +325,9 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         elif trade_type == 'short':
             result = entry_price - exit_price
         if result > 0:
-            exit_color = profit_color
+            exit_color = theme['profit_color']
         elif result < 0:
-            exit_color = loss_color
+            exit_color = theme['loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
         exit_date = exit_date.tz_localize('Asia/Tokyo')
@@ -303,36 +347,42 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         hlines = dict(hlines=hlines, colors=colors, linestyle='dotted',
                       linewidths=1, alpha=marker_coordinate_alpha)
 
-    add_ma(formalized, mpf, addplot)
+    add_ma(config, formalized, mpf, addplot)
 
     panel = 0
-    panel = add_macd(formalized, panel, mpf, addplot)
-    panel = stoch_panel = add_stoch(formalized, panel, mpf, addplot)
+    panel = add_macd(config, formalized, panel, mpf, addplot)
+    panel = stoch_panel = add_stoch(config, formalized, panel, mpf, addplot)
 
     # TODO: base_mpl_style
     style = {'base_mpl_style': 'dark_background',
-             'marketcolors': {'candle': {'up': up_color, 'down': down_color},
-                              'edge': {'up': up_color, 'down': down_color},
-                              'wick': {'up': up_color, 'down': down_color},
-                              'ohlc': {'up': up_color, 'down': down_color},
-                              'volume': {'up': up_color, 'down': down_color},
-                              'vcedge': {'up': up_color, 'down': down_color},
+             'marketcolors': {'candle': {'up': theme['up_color'],
+                                         'down': theme['down_color']},
+                              'edge': {'up': theme['up_color'],
+                                       'down': theme['down_color']},
+                              'wick': {'up': theme['up_color'],
+                                       'down': theme['down_color']},
+                              'ohlc': {'up': theme['up_color'],
+                                       'down': theme['down_color']},
+                              'volume': {'up': theme['up_color'],
+                                         'down': theme['down_color']},
+                              'vcedge': {'up': theme['up_color'],
+                                         'down': theme['down_color']},
                               'vcdopcod': None,
                               'alpha': None},
              'mavcolors': None,
-             'facecolor': face_color,
-             'figcolor': figure_color,
-             'gridcolor': grid_color,
+             'facecolor': theme['face_color'],
+             'figcolor': theme['figure_color'],
+             'gridcolor': theme['grid_color'],
              'gridstyle': '-',
              'y_on_right': None,
              # TODO: minor
-             'rc': {'axes.edgecolor': edge_color,
-                    'axes.labelcolor': label_color,
+             'rc': {'axes.edgecolor': theme['edge_color'],
+                    'axes.labelcolor': theme['label_color'],
                     'figure.titlesize': 'x-large',
                     'figure.titleweight': 'semibold',
-                    'text.color': text_color,
-                    'xtick.color': tick_color,
-                    'ytick.color': tick_color}}
+                    'text.color': theme['text_color'],
+                    'xtick.color': theme['tick_color'],
+                    'ytick.color': theme['tick_color']}}
 
     panel += 1
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
@@ -363,13 +413,13 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         if current_open != entry_price and current_open != exit_price:
             delta = current_open - previous_close
             style = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-            add_tooltips(axlist, current_open, style, 'gray')
+            add_tooltips(config, axlist, current_open, style, 'gray')
 
     last_primary_axis = len(axlist) - 2
     if not pd.isna(entry_price):
         acronym = create_acronym(entry_reason)
         if acronym:
-            add_tooltips(axlist, entry_price, acronym, entry_color,
+            add_tooltips(config, axlist, entry_price, acronym, entry_color,
                          last_primary_axis, formalized, entry_timestamp)
     if not pd.isna(exit_price):
         acronym = create_acronym(exit_reason)
@@ -378,7 +428,7 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         else:
             style = f'{result:.1f}, {change:.2f}%'
 
-        add_tooltips(axlist, exit_price, style, exit_color,
+        add_tooltips(config, axlist, exit_price, style, exit_color,
                      last_primary_axis, formalized, exit_timestamp)
 
     error_series = pd.Series(
@@ -393,11 +443,11 @@ def plot_chart(entry_date, number, entry_time, symbol, trade_type, entry_price,
         title = base
 
     fig.suptitle(title, size='medium', alpha=0.4)
-    fig.savefig(os.path.normpath(os.path.join(trading_directory,
-                                              base + '.png')))
+    fig.savefig(os.path.join(config['General']['trading_directory'],
+                             base + '.png'))
 
 
-def add_ma(formalized, mpf, addplot, ma='ema'):
+def add_ma(config, formalized, mpf, addplot, ma='ema'):
     """
     Add Exponential Moving Average (EMA) plots to the existing plots.
 
@@ -406,6 +456,7 @@ def add_ma(formalized, mpf, addplot, ma='ema'):
     existing plots.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         formalized (DataFrame): The DataFrame containing the closing
             prices.
         mpf (module): The mplfinance module used for creating the plots.
@@ -419,13 +470,15 @@ def add_ma(formalized, mpf, addplot, ma='ema'):
         ma_2 = ema(formalized.close, 25)
         ma_3 = ema(formalized.close, 75)
 
-    ma_apd = [mpf.make_addplot(ma_1, color=primary_color, width=0.8),
-              mpf.make_addplot(ma_2, color=secondary_color, width=0.8),
-              mpf.make_addplot(ma_3, color=tertiary_color, width=0.8)]
+    theme = config[config['General']['theme']]
+    ma_apd = [
+        mpf.make_addplot(ma_1, color=theme['primary_color'], width=0.8),
+        mpf.make_addplot(ma_2, color=theme['secondary_color'], width=0.8),
+        mpf.make_addplot(ma_3, color=theme['tertiary_color'], width=0.8)]
     addplot.extend(ma_apd)
 
 
-def add_macd(formalized, panel, mpf, addplot, ma='ema'):
+def add_macd(config, formalized, panel, mpf, addplot, ma='ema'):
     """
     Add Moving Average Convergence Divergence (MACD) plots to the panel.
 
@@ -435,6 +488,7 @@ def add_macd(formalized, panel, mpf, addplot, ma='ema'):
     ('ema' or 'tema') can be specified.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         formalized (DataFrame): The DataFrame containing the closing
             prices.
         panel (int): The panel number to which the plots will be added.
@@ -457,13 +511,16 @@ def add_macd(formalized, panel, mpf, addplot, ma='ema'):
     signal = macd.ewm(span=9).mean()
     histogram = macd - signal
     panel += 1
-    macd_apd = [mpf.make_addplot(macd, panel=panel, color=primary_color,
-                                 width=0.8, ylabel=ylabel),
-                mpf.make_addplot(signal, panel=panel, color=secondary_color,
-                                 width=0.8, secondary_y=False),
-                mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
-                                 color=tertiary_color, secondary_y=False)]
+    theme = config[config['General']['theme']]
+    macd_apd = [
+        mpf.make_addplot(macd, panel=panel, color=theme['primary_color'],
+                         width=0.8, ylabel=ylabel),
+        mpf.make_addplot(signal, panel=panel, color=theme['secondary_color'],
+                         width=0.8, secondary_y=False),
+        mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
+                         color=theme['tertiary_color'], secondary_y=False)]
     addplot.extend(macd_apd)
+
     return panel
 
 
@@ -512,7 +569,7 @@ def tema(series, span):
     return tema
 
 
-def add_stoch(formalized, panel, mpf, addplot):
+def add_stoch(config, formalized, panel, mpf, addplot):
     """
     Add stochastic oscillator plots to the given panel.
 
@@ -521,6 +578,7 @@ def add_stoch(formalized, panel, mpf, addplot):
     for these values which are added to the given panel.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         formalized (DataFrame): The DataFrame containing the high, low,
             and close prices.
         panel (int): The panel number to which the plots will be added.
@@ -545,13 +603,15 @@ def add_stoch(formalized, panel, mpf, addplot):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
+    theme = config[config['General']['theme']]
     stoch_apd = [mpf.make_addplot(formalized.k, panel=panel,
-                                  color=primary_color, width=0.8,
+                                  color=theme['primary_color'], width=0.8,
                                   ylabel='Stochastics'),
                  mpf.make_addplot(formalized.d, panel=panel,
-                                  color=secondary_color, width=0.8,
+                                  color=theme['secondary_color'], width=0.8,
                                   secondary_y=False)]
     addplot.extend(stoch_apd)
+
     return panel
 
 
@@ -615,7 +675,7 @@ def create_acronym(phrase):
         return acronym
 
 
-def add_tooltips(axlist, price, s, color,
+def add_tooltips(config, axlist, price, s, color,
                  last_primary_axis=None, formalized=None, timestamp=None):
     """
     Add tooltips to the specified axes list.
@@ -625,6 +685,7 @@ def add_tooltips(axlist, price, s, color,
     formatted with the provided text, color, and alpha values.
 
     Args:
+        config (ConfigParser): The configuration parser object.
         axlist (list): A list of axes objects to which the tooltips will
             be added.
         price (float): The price at which the tooltip will be placed.
@@ -639,17 +700,20 @@ def add_tooltips(axlist, price, s, color,
     """
     tooltip_foreground_alpha = 0.8
     tooltip_background_alpha = 0.6
-    axlist[0].text(-1.2, price, s, alpha=tooltip_foreground_alpha,
-                   c=tooltip_color, size='small', ha='right', va='center',
-                   bbox=dict(boxstyle='round, pad=0.2',
-                             alpha=tooltip_background_alpha, ec='none',
-                             fc=color))
+    theme = config[config['General']['theme']]
+
+    axlist[0].text(
+        -1.2, price, s, alpha=tooltip_foreground_alpha,
+        c=theme['tooltip_color'], size='small', ha='right', va='center',
+        bbox=dict(boxstyle='round, pad=0.2',
+                  alpha=tooltip_background_alpha, ec='none',
+                  fc=color))
     if timestamp:
         bottom, top = axlist[last_primary_axis].get_ylim()
         axlist[last_primary_axis].text(
             formalized.index.get_loc(timestamp), -0.03 * (top - bottom),
             timestamp.strftime('%H:%M'), alpha=tooltip_foreground_alpha,
-            c=tooltip_color, size='small', ha='center', va='top',
+            c=theme['tooltip_color'], size='small', ha='center', va='top',
             bbox=dict(boxstyle='round, pad=0.2',
                       alpha=tooltip_background_alpha, ec='none', fc=color))
 
@@ -680,7 +744,7 @@ def add_errors(error_series, axlist):
         axlist[0].text(0, top, errors, alpha=0.8, va='top')
 
 
-def check_charts():
+def check_charts(config):
     """
     Validate charts in the trading directory and print invalid ones.
 
@@ -688,15 +752,22 @@ def check_charts():
     are not referenced in the journal's Chart values. It also checks for
     referenced charts in the journal that do not exist in the trading
     directory. Any discrepancies found are printed to the console.
-    """
-    for f in os.listdir(trading_directory):
-        if (f.endswith('.png') and not f.endswith('-screenshot.png')
-                and f not in journal.Chart.values):
-            print(os.path.normpath(os.path.join(trading_directory, f)))
 
-    for value in journal.Chart:
+    Args:
+        config (ConfigParser): The configuration parser object.
+    """
+    trading_journal = pd.read_excel(
+        config['General']['trading_path'],
+        sheet_name=config['General']['trading_sheet'])
+
+    for f in os.listdir(config['General']['trading_directory']):
+        if (f.endswith('.png') and not f.endswith('-screenshot.png')
+            and f not in trading_journal.Chart.values):
+            print(os.path.join(config['General']['trading_directory'], f))
+
+    for value in trading_journal.Chart:
         if isinstance(value, str) and not os.path.exists(
-                os.path.normpath(os.path.join(trading_directory, value))):
+                os.path.join(config['General']['trading_directory'], value)):
             print(value)
 
 
