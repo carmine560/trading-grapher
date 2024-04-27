@@ -51,24 +51,14 @@ def main():
     trading_journal = pd.read_excel(
         config['General']['trading_path'],
         sheet_name=config['General']['trading_sheet'])
-
     for date in pd.to_datetime(args.dates):
-        # TODO: configure column names
-        trades = trading_journal.loc[trading_journal.Date == date]
+        trades = trading_journal.loc[
+            trading_journal[config['Trading Journal']['entry_date']] == date]
         for _, trade in trades.iterrows():
-            # save_market_data(config, trade.Date, trade['#'], trade.SYM,
-            #                  trade['Time.1'])
             save_market_data(config, trade)
-            # plot_chart(config, row.Date, row['#'], row.Time, row.SYM, row.Type,
-            #            row.Entry, row.Tactic, row.Reason, row['Date.1'],
-            #            row['Time.1'], row.Exit, row['Reason.1'], row['%Δ'],
-            #            row['Error 1'], row['Error 2'], row['Error 3'],
-            #            row['Error 4'], row['Error 5'], row['Error 6'],
-            #            row['Error 7'], row['Error 8'], row['Error 9'],
-            #            row['Error 10'])
             plot_chart(config, trade)
 
-    check_charts(config)
+    check_charts(config, trading_journal[config['Trading Journal']['chart']])
 
 
 def configure(config_path, can_interpolate=True, can_override=True):
@@ -93,7 +83,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         config = configparser.ConfigParser(
             interpolation=configparser.ExtendedInterpolation())
     else:
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
 
     config['General'] = {
         # TODO: add option '2022-12-14'
@@ -105,19 +95,19 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Market Data'] = {
         'time_zone': 'Asia/Tokyo'}
     config['Trading Journal'] = {
-        'entry_date': 'Date',
-        'number': '#',
-        'entry_time': 'Time',
-        'symbol': 'SYM',
-        'trade_type': 'Type',
-        'entry_price': 'Entry',
+        'entry_date': 'Entry date',
+        'number': 'Number',
+        'entry_time': 'Entry time',
+        'symbol': 'Symbol',
+        'trade_type': 'Trade type',
+        'entry_price': 'Entry price',
         'tactic': 'Tactic',
-        'entry_reason': 'Reason',
-        'exit_date': 'Date.1',
-        'exit_time': 'Time.1',
-        'exit_price': 'Exit',
-        'exit_reason': 'Reason.1',
-        'change': '%Δ',
+        'entry_reason': 'Entry reason',
+        'exit_date': 'Exit date',
+        'exit_time': 'Exit time',
+        'exit_price': 'Exit price',
+        'exit_reason': 'Exit reason',
+        'change': 'Change',
         'error_1': 'Error 1',
         'error_2': 'Error 2',
         'error_3': 'Error 3',
@@ -127,8 +117,8 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'error_7': 'Error 7',
         'error_8': 'Error 8',
         'error_9': 'Error 9',
-        'error_10': 'Error 10'
-    }
+        'error_10': 'Error 10',
+        'chart': 'Chart'}
     config['Dark'] = {          # Fluorite, Ametrine
         'face_color': '#242424',
         'figure_color': '#242424',
@@ -198,23 +188,25 @@ def get_variables(config, symbol, entry_date, number):
     return base, market_data, entry_date
 
 
-# def save_market_data(config, entry_date, number, symbol, exit_time):
 def save_market_data(config, trade):
     """
-    Save the market data for a given symbol to a CSV file.
+    Save historical market data for a given symbol to a CSV file.
 
-    This function retrieves the historical market data for a given
-    symbol from Yahoo Finance, processes it, and saves it to a CSV file.
-    The data includes open, high, low, close, and volume information.
-    The function checks if the data is up-to-date and only retrieves new
+    Retrieves historical market data for a given trading symbol from
+    Yahoo Finance, processes it, and saves it to a CSV file. The data
+    includes open, high, low, close, and volume information. The
+    function checks if the data is up-to-date and only retrieves new
     data if necessary.
 
     Args:
-        config (ConfigParser): The configuration parser object.
-        entry_date (datetime): The date of the trade entry.
-        number (int): The number of the trade.
-        symbol (str): The trading symbol.
-        exit_time (time): The time of the trade exit.
+        config (ConfigParser): A ConfigParser instance containing the
+            configuration settings.
+        trade (Series): A pandas Series representing a trade entry with
+            the following keys:
+            - 'entry_date' (datetime): The date of the trade entry.
+            - 'number' (int): The number of the trade.
+            - 'symbol' (str): The trading symbol.
+            - 'exit_time' (time): The time of the trade exit.
     """
     entry_date = trade[config['Trading Journal']['entry_date']]
     number = trade[config['Trading Journal']['number']]
@@ -296,38 +288,36 @@ def save_market_data(config, trade):
         formalized.to_csv(market_data)
 
 
-# def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
-#                entry_price, tactic, entry_reason, exit_date, exit_time,
-#                exit_price, exit_reason, change, error_1, error_2, error_3,
-#                error_4, error_5, error_6, error_7, error_8, error_9, error_10):
 def plot_chart(config, trade):
     """
     Plot a trading chart with entry and exit points, and indicators.
 
-    This function generates a trading chart for a given symbol, with
-    markers for entry and exit points, and plots for various technical
-    indicators. It also adds tooltips for the entry and exit points, and
-    any errors.
+    Generates a trading chart for a given symbol, with markers for entry
+    and exit points, and plots for various technical indicators. It also
+    adds tooltips for the entry and exit points, and any errors.
 
     Args:
-        config (ConfigParser): The configuration parser object.
-        entry_date (datetime): The date of the trade entry.
-        number (int): The number of the trade.
-        entry_time (str): The time of the trade entry.
-        symbol (str): The trading symbol.
-        trade_type (str): The type of the trade ('long' or 'short').
-        entry_price (float): The price at the trade entry.
-        tactic (str): The trading tactic used.
-        entry_reason (str): The reason for the trade entry.
-        exit_date (datetime): The date of the trade exit.
-        exit_time (str): The time of the trade exit.
-        exit_price (float): The price at the trade exit.
-        exit_reason (str): The reason for the trade exit.
-        change (float): The price change from the trade entry to the
-            exit.
-        error_1, error_2, error_3, error_4, error_5, error_6, error_7,
-        error_8, error_9, error_10 (str): The potential errors in the
-            trade.
+        config (ConfigParser): A ConfigParser instance containing the
+            configuration settings.
+        trade (Series): A pandas Series representing a trade entry with
+            the following keys:
+            - 'entry_date' (datetime): The date of the trade entry.
+            - 'number' (int): The number of the trade.
+            - 'entry_time' (str): The time of the trade entry.
+            - 'symbol' (str): The trading symbol.
+            - 'trade_type' (str): The type of the trade ('long' or
+              'short').
+            - 'entry_price' (float): The price at the trade entry.
+            - 'tactic' (str): The trading tactic used.
+            - 'entry_reason' (str): The reason for the trade entry.
+            - 'exit_date' (datetime): The date of the trade exit.
+            - 'exit_time' (str): The time of the trade exit.
+            - 'exit_price' (float): The price at the trade exit.
+            - 'exit_reason' (str): The reason for the trade exit.
+            - 'change' (float): The price change from the trade entry to
+              the exit.
+            - 'error_1' to 'error_10' (str): Potential errors in the
+              trade.
     """
     entry_date = trade[config['Trading Journal']['entry_date']]
     number = trade[config['Trading Journal']['number']]
@@ -828,29 +818,25 @@ def add_errors(error_series, axlist):
         axlist[0].text(0, top, errors, alpha=0.8, va='top')
 
 
-# TODO: customize Chart
-def check_charts(config):
+def check_charts(config, charts):
     """
     Validate charts in the trading directory and print invalid ones.
 
     This function checks for '.png' files in the trading directory that
-    are not referenced in the journal's Chart values. It also checks for
-    referenced charts in the journal that do not exist in the trading
+    are not referenced in the journal's chart values. It also verifies
+    that referenced charts in the journal exist in the trading
     directory. Any discrepancies found are printed to the console.
 
     Args:
-        config (ConfigParser): The configuration parser object.
+        config (ConfigParser): A ConfigParser instance containing the
+            configuration settings.
+        charts (Series): A pandas Series containing chart references.
     """
-    trading_journal = pd.read_excel(
-        config['General']['trading_path'],
-        sheet_name=config['General']['trading_sheet'])
-
     for f in os.listdir(config['General']['trading_directory']):
-        if (f.endswith('.png') and not f.endswith('-screenshot.png')
-            and f not in trading_journal.Chart.values):
+        if f.endswith('.png') and f not in charts.values:
             print(os.path.join(config['General']['trading_directory'], f))
 
-    for value in trading_journal.Chart:
+    for value in charts:
         if isinstance(value, str) and not os.path.exists(
                 os.path.join(config['General']['trading_directory'], value)):
             print(value)
