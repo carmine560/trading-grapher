@@ -53,18 +53,20 @@ def main():
         sheet_name=config['General']['trading_sheet'])
 
     for date in pd.to_datetime(args.dates):
+        # TODO: configure column names
         trades = trading_journal.loc[trading_journal.Date == date]
-        for index, row in trades.iterrows():
-            # TODO: configure column names
-            save_market_data(config, row.Date, row['#'], row.SYM,
-                             row['Time.1'])
-            plot_chart(config, row.Date, row['#'], row.Time, row.SYM, row.Type,
-                       row.Entry, row.Tactic, row.Reason, row['Date.1'],
-                       row['Time.1'], row.Exit, row['Reason.1'], row['%Δ'],
-                       row['Error 1'], row['Error 2'], row['Error 3'],
-                       row['Error 4'], row['Error 5'], row['Error 6'],
-                       row['Error 7'], row['Error 8'], row['Error 9'],
-                       row['Error 10'])
+        for _, trade in trades.iterrows():
+            # save_market_data(config, trade.Date, trade['#'], trade.SYM,
+            #                  trade['Time.1'])
+            save_market_data(config, trade)
+            # plot_chart(config, row.Date, row['#'], row.Time, row.SYM, row.Type,
+            #            row.Entry, row.Tactic, row.Reason, row['Date.1'],
+            #            row['Time.1'], row.Exit, row['Reason.1'], row['%Δ'],
+            #            row['Error 1'], row['Error 2'], row['Error 3'],
+            #            row['Error 4'], row['Error 5'], row['Error 6'],
+            #            row['Error 7'], row['Error 8'], row['Error 9'],
+            #            row['Error 10'])
+            plot_chart(config, trade)
 
     check_charts(config)
 
@@ -102,6 +104,31 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'theme': 'Dark'}
     config['Market Data'] = {
         'time_zone': 'Asia/Tokyo'}
+    config['Trading Journal'] = {
+        'entry_date': 'Date',
+        'number': '#',
+        'entry_time': 'Time',
+        'symbol': 'SYM',
+        'trade_type': 'Type',
+        'entry_price': 'Entry',
+        'tactic': 'Tactic',
+        'entry_reason': 'Reason',
+        'exit_date': 'Date.1',
+        'exit_time': 'Time.1',
+        'exit_price': 'Exit',
+        'exit_reason': 'Reason.1',
+        'change': '%Δ',
+        'error_1': 'Error 1',
+        'error_2': 'Error 2',
+        'error_3': 'Error 3',
+        'error_4': 'Error 4',
+        'error_5': 'Error 5',
+        'error_6': 'Error 6',
+        'error_7': 'Error 7',
+        'error_8': 'Error 8',
+        'error_9': 'Error 9',
+        'error_10': 'Error 10'
+    }
     config['Dark'] = {          # Fluorite, Ametrine
         'face_color': '#242424',
         'figure_color': '#242424',
@@ -171,7 +198,8 @@ def get_variables(config, symbol, entry_date, number):
     return base, market_data, entry_date
 
 
-def save_market_data(config, entry_date, number, symbol, exit_time):
+# def save_market_data(config, entry_date, number, symbol, exit_time):
+def save_market_data(config, trade):
     """
     Save the market data for a given symbol to a CSV file.
 
@@ -188,6 +216,11 @@ def save_market_data(config, entry_date, number, symbol, exit_time):
         symbol (str): The trading symbol.
         exit_time (time): The time of the trade exit.
     """
+    entry_date = trade[config['Trading Journal']['entry_date']]
+    number = trade[config['Trading Journal']['number']]
+    symbol = trade[config['Trading Journal']['symbol']]
+    exit_time = trade[config['Trading Journal']['exit_time']]
+
     PERIOD_IN_DAYS = 7
     _, market_data, entry_date = get_variables(config, symbol, entry_date,
                                                number)
@@ -263,10 +296,11 @@ def save_market_data(config, entry_date, number, symbol, exit_time):
         formalized.to_csv(market_data)
 
 
-def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
-               entry_price, tactic, entry_reason, exit_date, exit_time,
-               exit_price, exit_reason, change, error_1, error_2, error_3,
-               error_4, error_5, error_6, error_7, error_8, error_9, error_10):
+# def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
+#                entry_price, tactic, entry_reason, exit_date, exit_time,
+#                exit_price, exit_reason, change, error_1, error_2, error_3,
+#                error_4, error_5, error_6, error_7, error_8, error_9, error_10):
+def plot_chart(config, trade):
     """
     Plot a trading chart with entry and exit points, and indicators.
 
@@ -295,6 +329,30 @@ def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
         error_8, error_9, error_10 (str): The potential errors in the
             trade.
     """
+    entry_date = trade[config['Trading Journal']['entry_date']]
+    number = trade[config['Trading Journal']['number']]
+    entry_time = trade[config['Trading Journal']['entry_time']]
+    symbol = trade[config['Trading Journal']['symbol']]
+    trade_type = trade[config['Trading Journal']['trade_type']]
+    entry_price = trade[config['Trading Journal']['entry_price']]
+    tactic = trade[config['Trading Journal']['tactic']]
+    entry_reason = trade[config['Trading Journal']['entry_reason']]
+    exit_date = trade[config['Trading Journal']['exit_date']]
+    exit_time = trade[config['Trading Journal']['exit_time']]
+    exit_price = trade[config['Trading Journal']['exit_price']]
+    exit_reason = trade[config['Trading Journal']['exit_reason']]
+    change = trade[config['Trading Journal']['change']]
+    error_1 = trade[config['Trading Journal']['error_1']]
+    error_2 = trade[config['Trading Journal']['error_2']]
+    error_3 = trade[config['Trading Journal']['error_3']]
+    error_4 = trade[config['Trading Journal']['error_4']]
+    error_5 = trade[config['Trading Journal']['error_5']]
+    error_6 = trade[config['Trading Journal']['error_6']]
+    error_7 = trade[config['Trading Journal']['error_7']]
+    error_8 = trade[config['Trading Journal']['error_8']]
+    error_9 = trade[config['Trading Journal']['error_9']]
+    error_10 = trade[config['Trading Journal']['error_10']]
+
     base, market_data, entry_date = get_variables(config, symbol, entry_date,
                                                   number)
     theme = config[config['General']['theme']]
