@@ -28,12 +28,26 @@ def main():
     all dates, it checks the charts for any discrepancies.
     """
     parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        '-C', action='store_true',
+        help='check configuration changes and exit')
     parser.add_argument('dates', nargs='*',
                         default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
                         help='specify dates')
     args = parser.parse_args()
 
-    config = configure(file_utilities.get_config_path(__file__))
+    config_path = file_utilities.get_config_path(__file__)
+    if args.C:
+        default_config = configure(config_path, can_interpolate=False,
+                                   can_override=False)
+        configuration.check_config_changes(
+            default_config, config_path,
+            backup_parameters={'number_of_backups': 8})
+        return
+    else:
+        config = configure(config_path)
+
     trading_journal = pd.read_excel(
         config['General']['trading_path'],
         sheet_name=config['General']['trading_sheet'])
@@ -55,14 +69,20 @@ def main():
     check_charts(config)
 
 
-def configure(config_path, can_interpolate=True):
+def configure(config_path, can_interpolate=True, can_override=True):
     """
     Get the configuration parser object with the set up configuration.
+
+    This function initializes a configuration parser object based on the
+    provided configuration file path. It allows optional interpolation
+    and overriding of existing configuration settings.
 
     Args:
         config_path (str): The path to the configuration file.
         can_interpolate (bool, optional): If True, enable interpolation.
             Defaults to True.
+        can_override (bool, optional): If True, allow overriding of
+            existing configuration settings. Defaults to True.
 
     Returns:
         ConfigParser: The configuration parser object.
@@ -75,12 +95,14 @@ def configure(config_path, can_interpolate=True):
 
     config['General'] = {
         # TODO: add option '2022-12-14'
-        'trading_directory':
-        os.path.join(os.path.expanduser('~'), 'Dropbox/Documents/Trading'),
+        'trading_directory': os.path.join(os.path.expanduser('~'),
+                                          'Documents/Trading'),
         'trading_path': os.path.join('${trading_directory}', 'Trading.ods'),
         'trading_sheet': 'Trading Journal',
         'theme': 'Dark'}
-    config['Dark'] = {
+    config['Market Data'] = {
+        'time_zone': 'Asia/Tokyo'}
+    config['Dark'] = {          # Fluorite, Ametrine
         'face_color': '#242424',
         'figure_color': '#242424',
         'grid_color': '#3d3d3d',
@@ -115,10 +137,9 @@ def configure(config_path, can_interpolate=True):
         'loss_color': '${down_color}',
         'text_color': 'black'}
 
-    if os.path.exists(config_path):
-        config.read(config_path)
-    else:
-        configuration.write_config(config, config_path)
+    if can_override:
+        configuration.read_config(config, config_path)
+        configuration.write_config(config, config_path)  # TODO
 
     return config
 
@@ -129,7 +150,7 @@ def get_variables(config, symbol, entry_date, number):
 
     This function generates a base string using the entry date, trade
     number, and symbol. It also constructs the path to the market data
-    file and localizes the entry date to 'Asia/Tokyo' timezone.
+    file and localizes the entry date to the specified timezone.
 
     Args:
         config (ConfigParser): The configuration parser object.
@@ -145,8 +166,7 @@ def get_variables(config, symbol, entry_date, number):
     market_data = os.path.join(
         config['General']['trading_directory'],
         f"{entry_date.strftime('%Y-%m-%d')}-00-{symbol}.csv")
-    # TODO: customize time_zone
-    entry_date = entry_date.tz_localize('Asia/Tokyo')
+    entry_date = entry_date.tz_localize(config['Market Data']['time_zone'])
 
     return base, market_data, entry_date
 
@@ -171,18 +191,21 @@ def save_market_data(config, entry_date, number, symbol, exit_time):
     PERIOD_IN_DAYS = 7
     _, market_data, entry_date = get_variables(config, symbol, entry_date,
                                                number)
-    delta = pd.Timestamp.now(tz='Asia/Tokyo').normalize() - entry_date
-    last = modified_time = pd.Timestamp(0, tz='Asia/Tokyo')
+    delta = pd.Timestamp.now(
+        tz=config['Market Data']['time_zone']).normalize() - entry_date
+    last = modified_time = pd.Timestamp(
+        0, tz=config['Market Data']['time_zone'])
 
     if os.path.exists(market_data):
         formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
         last = formalized.tail(1).index[0]
         modified_time = pd.Timestamp(os.path.getmtime(market_data),
-                                     tz='Asia/Tokyo', unit='s')
+                                     tz=config['Market Data']['time_zone'],
+                                     unit='s')
 
     if (PERIOD_IN_DAYS <= 1 + delta.days
         or last + pd.Timedelta(minutes=30) < modified_time
-        or pd.Timestamp.now(tz='Asia/Tokyo')
+        or pd.Timestamp.now(tz=config['Market Data']['time_zone'])
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
@@ -198,7 +221,8 @@ def save_market_data(config, entry_date, number, symbol, exit_time):
         df = pd.DataFrame(symbol_data)
         df.timestamp = pd.to_datetime(df.timestamp, unit='ms')
         df.set_index('timestamp', inplace=True)
-        df.index = df.index.tz_localize('UTC').tz_convert('Asia/Tokyo')
+        df.index = df.index.tz_localize('UTC').tz_convert(
+            config['Market Data']['time_zone'])
         q = df.volume.quantile(0.99)
         df['volume'] = df['volume'].mask(df['volume'] > q, q)
 
@@ -206,7 +230,8 @@ def save_market_data(config, entry_date, number, symbol, exit_time):
         if len(previous):
             previous_date = pd.Timestamp.date(
                 previous.dropna().tail(1).index[0])
-            previous_date = pd.Timestamp(previous_date, tz='Asia/Tokyo')
+            previous_date = pd.Timestamp(previous_date,
+                                         tz=config['Market Data']['time_zone'])
 
         morning = pd.Timedelta(str(exit_time)) < pd.Timedelta(hours=12)
         if morning and len(previous):
@@ -330,7 +355,7 @@ def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
             exit_color = theme['loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
-        exit_date = exit_date.tz_localize('Asia/Tokyo')
+        exit_date = exit_date.tz_localize(config['Market Data']['time_zone'])
         exit_timestamp = exit_date + pd.Timedelta(str(exit_time))
         formalized.loc[exit_timestamp, 'exit_point'] = exit_price
         exit_apd = mpf.make_addplot(formalized.exit_point, type='scatter',
@@ -355,6 +380,7 @@ def plot_chart(config, entry_date, number, entry_time, symbol, trade_type,
 
     # TODO: base_mpl_style
     style = {'base_mpl_style': 'dark_background',
+             # TODO: candle_up_color, etc.
              'marketcolors': {'candle': {'up': theme['up_color'],
                                          'down': theme['down_color']},
                               'edge': {'up': theme['up_color'],
@@ -744,6 +770,7 @@ def add_errors(error_series, axlist):
         axlist[0].text(0, top, errors, alpha=0.8, va='top')
 
 
+# TODO: customize Chart
 def check_charts(config):
     """
     Validate charts in the trading directory and print invalid ones.
