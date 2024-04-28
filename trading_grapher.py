@@ -4,6 +4,7 @@
 
 import argparse
 import configparser
+import importlib
 import os
 import re
 import sys
@@ -91,7 +92,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
                                           'Documents/Trading'),
         'trading_path': os.path.join('${trading_directory}', 'Trading.ods'),
         'trading_sheet': 'Trading Journal',
-        'theme': 'Dark'}
+        'style': 'fluorite'}    # TODO: add ametrine
     config['Market Data'] = {
         'time_zone': 'Asia/Tokyo'}
     config['Trading Journal'] = {
@@ -119,40 +120,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'error_9': 'Error 9',
         'error_10': 'Error 10',
         'chart': 'Chart'}
-    config['Dark'] = {          # Fluorite, Ametrine
-        'face_color': '#242424',
-        'figure_color': '#242424',
-        'grid_color': '#3d3d3d',
-        'edge_color': '#999999',
-        'tick_color': '#999999',
-        'label_color': '#999999',
-        'up_color': 'mediumspringgreen',
-        'down_color': 'hotpink',
-        'primary_color': 'darksalmon',
-        'secondary_color': 'cornflowerblue',
-        'tertiary_color': 'rebeccapurple',
-        'tooltip_color': 'black',
-        'neutral_color': 'lightgray',
-        'profit_color': '${up_color}',
-        'loss_color': '${down_color}',
-        'text_color': '#f6f3e8'}
-    config['Light'] = {
-        'face_color': '#fafafa',
-        'figure_color': 'white',
-        'grid_color': '#d0d0d0',
-        'edge_color': '#f0f0f0',
-        'tick_color': '#101010',
-        'label_color': '#101010',
-        'up_color': '#00b060',
-        'down_color': '#fe3032',
-        'primary_color': '#ff7f0e',
-        'secondary_color': '#1f77b4',
-        'tertiary_color': '#e377c2',
-        'tooltip_color': 'white',
-        'neutral_color': 'black',
-        'profit_color': '${up_color}',
-        'loss_color': '${down_color}',
-        'text_color': 'black'}
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -345,7 +312,13 @@ def plot_chart(config, trade):
 
     base, market_data, entry_date = get_variables(config, symbol, entry_date,
                                                   number)
-    theme = config[config['General']['theme']]
+
+    try:
+        style = importlib.import_module(
+            f"_styles.{config['General']['style']}").style
+    except ModuleNotFoundError as e:
+        print(e)
+        sys.exit(1)
 
     if os.path.exists(market_data):
         formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
@@ -354,7 +327,7 @@ def plot_chart(config, trade):
         sys.exit(1)
 
     entry_timestamp = exit_timestamp = None
-    entry_color = theme['neutral_color']
+    entry_color = style['tg_neutral_color']
     addplot = []
     hlines = []
     colors = []
@@ -368,8 +341,7 @@ def plot_chart(config, trade):
         previous_close = previous.dropna().tail(1).close.iloc[0]
         current_open = current.dropna().head(1).open.iloc[0]
         hlines = [previous_close, current_open]
-        # TODO: theme
-        colors = ['gray', 'gray']
+        colors = [style['rc']['axes.edgecolor'], style['rc']['axes.edgecolor']]
 
     if trade_type == 'long':
         marker = 'o'
@@ -398,9 +370,9 @@ def plot_chart(config, trade):
         elif trade_type == 'short':
             result = entry_price - exit_price
         if result > 0:
-            exit_color = theme['profit_color']
+            exit_color = style['tg_profit_color']
         elif result < 0:
-            exit_color = theme['loss_color']
+            exit_color = style['tg_loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
         exit_date = exit_date.tz_localize(config['Market Data']['time_zone'])
@@ -420,43 +392,12 @@ def plot_chart(config, trade):
         hlines = dict(hlines=hlines, colors=colors, linestyle='dotted',
                       linewidths=1, alpha=marker_coordinate_alpha)
 
-    add_ma(config, formalized, mpf, addplot)
+    add_ma(config, formalized, mpf, addplot, style)
 
     panel = 0
-    panel = add_macd(config, formalized, panel, mpf, addplot)
-    panel = stoch_panel = add_stoch(config, formalized, panel, mpf, addplot)
-
-    # TODO: base_mpl_style
-    style = {'base_mpl_style': 'dark_background',
-             # TODO: candle_up_color, etc.
-             'marketcolors': {'candle': {'up': theme['up_color'],
-                                         'down': theme['down_color']},
-                              'edge': {'up': theme['up_color'],
-                                       'down': theme['down_color']},
-                              'wick': {'up': theme['up_color'],
-                                       'down': theme['down_color']},
-                              'ohlc': {'up': theme['up_color'],
-                                       'down': theme['down_color']},
-                              'volume': {'up': theme['up_color'],
-                                         'down': theme['down_color']},
-                              'vcedge': {'up': theme['up_color'],
-                                         'down': theme['down_color']},
-                              'vcdopcod': None,
-                              'alpha': None},
-             'mavcolors': None,
-             'facecolor': theme['face_color'],
-             'figcolor': theme['figure_color'],
-             'gridcolor': theme['grid_color'],
-             'gridstyle': '-',
-             'y_on_right': None,
-             # TODO: minor
-             'rc': {'axes.edgecolor': theme['edge_color'],
-                    'axes.labelcolor': theme['label_color'],
-                    'figure.titlesize': 'x-large',
-                    'figure.titleweight': 'semibold',
-                    'text.color': theme['text_color'],
-                    'xtick.color': theme['tick_color'],
-                    'ytick.color': theme['tick_color']}}
+    panel = add_macd(config, formalized, panel, mpf, addplot, style)
+    panel = stoch_panel = add_stochastics(config, formalized, panel, mpf,
+                                          addplot, style)
 
     panel += 1
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
@@ -486,24 +427,28 @@ def plot_chart(config, trade):
     if previous_close:
         if current_open != entry_price and current_open != exit_price:
             delta = current_open - previous_close
-            style = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-            add_tooltips(config, axlist, current_open, style, 'gray')
+            string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
+            add_tooltips(config, axlist, current_open, string,
+                         style['tg_tooltip_color'],
+                         style['rc']['axes.edgecolor'])
 
     last_primary_axis = len(axlist) - 2
     if not pd.isna(entry_price):
         acronym = create_acronym(entry_reason)
         if acronym:
-            add_tooltips(config, axlist, entry_price, acronym, entry_color,
+            add_tooltips(config, axlist, entry_price, acronym,
+                         style['tg_tooltip_color'], entry_color,
                          last_primary_axis, formalized, entry_timestamp)
     if not pd.isna(exit_price):
         acronym = create_acronym(exit_reason)
         if acronym:
-            style = f'{acronym}, {result:.1f}, {change:.2f}%'
+            string = f'{acronym}, {result:.1f}, {change:.2f}%'
         else:
-            style = f'{result:.1f}, {change:.2f}%'
+            string = f'{result:.1f}, {change:.2f}%'
 
-        add_tooltips(config, axlist, exit_price, style, exit_color,
-                     last_primary_axis, formalized, exit_timestamp)
+        add_tooltips(config, axlist, exit_price, string,
+                     style['tg_tooltip_color'], exit_color, last_primary_axis,
+                     formalized, exit_timestamp)
 
     error_series = pd.Series(
         [error_1, error_2, error_3, error_4, error_5, error_6, error_7,
@@ -521,7 +466,7 @@ def plot_chart(config, trade):
                              base + '.png'))
 
 
-def add_ma(config, formalized, mpf, addplot, ma='ema'):
+def add_ma(config, formalized, mpf, addplot, style, ma='ema'):
     """
     Add Exponential Moving Average (EMA) plots to the existing plots.
 
@@ -536,6 +481,8 @@ def add_ma(config, formalized, mpf, addplot, ma='ema'):
         mpf (module): The mplfinance module used for creating the plots.
         addplot (list): The list of existing plots to which the new
             plots will be added.
+        style (dict): The custom style parameters for the stochastic
+            plots.
         ma (str, optional): The type of moving average to use. Defaults
             to 'ema'.
     """
@@ -544,15 +491,14 @@ def add_ma(config, formalized, mpf, addplot, ma='ema'):
         ma_2 = ema(formalized.close, 25)
         ma_3 = ema(formalized.close, 75)
 
-    theme = config[config['General']['theme']]
     ma_apd = [
-        mpf.make_addplot(ma_1, color=theme['primary_color'], width=0.8),
-        mpf.make_addplot(ma_2, color=theme['secondary_color'], width=0.8),
-        mpf.make_addplot(ma_3, color=theme['tertiary_color'], width=0.8)]
+        mpf.make_addplot(ma_1, color=style['mavcolors'][0], width=0.8),
+        mpf.make_addplot(ma_2, color=style['mavcolors'][1], width=0.8),
+        mpf.make_addplot(ma_3, color=style['mavcolors'][2], width=0.8)]
     addplot.extend(ma_apd)
 
 
-def add_macd(config, formalized, panel, mpf, addplot, ma='ema'):
+def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
     """
     Add Moving Average Convergence Divergence (MACD) plots to the panel.
 
@@ -569,6 +515,8 @@ def add_macd(config, formalized, panel, mpf, addplot, ma='ema'):
         mpf (module): The mplfinance module used for creating the plots.
         addplot (list): The list of existing plots to which the new
             plots will be added.
+        style (dict): The custom style parameters for the stochastic
+            plots.
         ma (str, optional): The type of moving average to use ('ema' or
             'tema'). Defaults to 'ema'.
 
@@ -585,14 +533,13 @@ def add_macd(config, formalized, panel, mpf, addplot, ma='ema'):
     signal = macd.ewm(span=9).mean()
     histogram = macd - signal
     panel += 1
-    theme = config[config['General']['theme']]
     macd_apd = [
-        mpf.make_addplot(macd, panel=panel, color=theme['primary_color'],
+        mpf.make_addplot(macd, panel=panel, color=style['mavcolors'][0],
                          width=0.8, ylabel=ylabel),
-        mpf.make_addplot(signal, panel=panel, color=theme['secondary_color'],
+        mpf.make_addplot(signal, panel=panel, color=style['mavcolors'][1],
                          width=0.8, secondary_y=False),
         mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
-                         color=theme['tertiary_color'], secondary_y=False)]
+                         color=style['mavcolors'][2], secondary_y=False)]
     addplot.extend(macd_apd)
 
     return panel
@@ -643,7 +590,7 @@ def tema(series, span):
     return tema
 
 
-def add_stoch(config, formalized, panel, mpf, addplot):
+def add_stochastics(config, formalized, panel, mpf, addplot, style):
     """
     Add stochastic oscillator plots to the given panel.
 
@@ -659,6 +606,8 @@ def add_stoch(config, formalized, panel, mpf, addplot):
         mpf (module): The mplfinance module used for creating the plots.
         addplot (list): The list of existing plots to which the new
             plots will be added.
+        style (dict): The custom style parameters for the stochastic
+            plots.
 
     Returns:
         int: The updated panel number.
@@ -666,8 +615,8 @@ def add_stoch(config, formalized, panel, mpf, addplot):
     k = 5
     d = 3
     smooth_k = 3
-    df = stoch(formalized.high, formalized.low, formalized.close, k=k, d=d,
-               smooth_k=smooth_k)
+    df = stochastics(formalized.high, formalized.low, formalized.close, k=k,
+                     d=d, smooth_k=smooth_k)
     if df.k.dropna().empty:
         df.k.fillna(50.0, inplace=True)
     if df.d.dropna().empty:
@@ -677,19 +626,18 @@ def add_stoch(config, formalized, panel, mpf, addplot):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
-    theme = config[config['General']['theme']]
     stoch_apd = [mpf.make_addplot(formalized.k, panel=panel,
-                                  color=theme['primary_color'], width=0.8,
+                                  color=style['mavcolors'][0], width=0.8,
                                   ylabel='Stochastics'),
                  mpf.make_addplot(formalized.d, panel=panel,
-                                  color=theme['secondary_color'], width=0.8,
+                                  color=style['mavcolors'][1], width=0.8,
                                   secondary_y=False)]
     addplot.extend(stoch_apd)
 
     return panel
 
 
-def stoch(high, low, close, k, d, smooth_k):
+def stochastics(high, low, close, k, d, smooth_k):
     """
     Calculate the stochastic oscillator values for a given dataset.
 
@@ -713,17 +661,17 @@ def stoch(high, low, close, k, d, smooth_k):
     lowest_low = low.rolling(k).min()
     highest_high = high.rolling(k).max()
 
-    stoch = 100 * (close - lowest_low)
+    stochastics = 100 * (close - lowest_low)
     diff = highest_high - lowest_low
     if diff.eq(0).any().any():
         diff += sys.float_info.epsilon
 
-    stoch /= diff
+    stochastics /= diff
 
-    stoch_k = stoch.rolling(smooth_k).mean()
-    stoch_d = stoch_k.rolling(d).mean()
+    stochastics_k = stochastics.rolling(smooth_k).mean()
+    stochastics_d = stochastics_k.rolling(d).mean()
 
-    return pd.DataFrame({'k': stoch_k, 'd': stoch_d})
+    return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
 
 
 def create_acronym(phrase):
@@ -749,7 +697,7 @@ def create_acronym(phrase):
         return acronym
 
 
-def add_tooltips(config, axlist, price, s, color,
+def add_tooltips(config, axlist, price, string, color, bbox_color,
                  last_primary_axis=None, formalized=None, timestamp=None):
     """
     Add tooltips to the specified axes list.
@@ -763,8 +711,9 @@ def add_tooltips(config, axlist, price, s, color,
         axlist (list): A list of axes objects to which the tooltips will
             be added.
         price (float): The price at which the tooltip will be placed.
-        s (str): The text to be displayed in the tooltip.
+        string (str): The text to be displayed in the tooltip.
         color (str): The color of the tooltip.
+        bbox_color (str): The color of the tooltip bounding box.
         last_primary_axis (int, optional): The index of the last primary
             axis. Defaults to None.
         formalized (pd.DataFrame, optional): A pandas DataFrame with a
@@ -772,24 +721,22 @@ def add_tooltips(config, axlist, price, s, color,
         timestamp (datetime, optional): The timestamp at which the
             tooltip will be placed. Defaults to None.
     """
-    tooltip_foreground_alpha = 0.8
-    tooltip_background_alpha = 0.6
-    theme = config[config['General']['theme']]
+    alpha = 0.8
+    bbox_alpha = 0.6
 
     axlist[0].text(
-        -1.2, price, s, alpha=tooltip_foreground_alpha,
-        c=theme['tooltip_color'], size='small', ha='right', va='center',
-        bbox=dict(boxstyle='round, pad=0.2',
-                  alpha=tooltip_background_alpha, ec='none',
-                  fc=color))
+        -1.2, price, string, alpha=alpha, c=color, size='small', ha='right',
+        va='center',
+        bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
+                  fc=bbox_color))
     if timestamp:
         bottom, top = axlist[last_primary_axis].get_ylim()
         axlist[last_primary_axis].text(
             formalized.index.get_loc(timestamp), -0.03 * (top - bottom),
-            timestamp.strftime('%H:%M'), alpha=tooltip_foreground_alpha,
-            c=theme['tooltip_color'], size='small', ha='center', va='top',
-            bbox=dict(boxstyle='round, pad=0.2',
-                      alpha=tooltip_background_alpha, ec='none', fc=color))
+            timestamp.strftime('%H:%M'), alpha=alpha, c=color, size='small',
+            ha='center', va='top',
+            bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
+                      fc=bbox_color))
 
 
 def add_errors(error_series, axlist):
