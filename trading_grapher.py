@@ -109,6 +109,8 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'exit_price': 'Exit price',
         'exit_reason': 'Exit reason',
         'change': 'Change',
+        # TODO: rename to note
+        # TODO: add title for notes
         'error_1': 'Error 1',
         'error_2': 'Error 2',
         'error_3': 'Error 3',
@@ -455,13 +457,27 @@ def plot_chart(config, trade):
          error_8, error_9, error_10]).dropna()
     add_errors(error_series, axlist)
 
+    # TODO: Trade 1 for 9501 at 2024-04-24 09:06:13
     acronym = create_acronym(tactic)
     if acronym:
         title = base + ', ' + acronym
     else:
         title = base
 
-    fig.suptitle(title, size='medium', alpha=0.4)
+    # TODO: create function
+    index = 2
+    bottom, top = axlist[index].get_ylim()
+    axlist[index].text(1.2,
+                       # top,
+                       top - 0.07 * (top - bottom),
+                       # top - 1.2,
+                       'Trade 1 for 9501 at 2024-04-24 09:06:13', alpha=0.8,
+                       backgroundcolor='blue',
+                       # weight='bold',
+                       va='top',
+                       )
+
+    # fig.suptitle(title, size='medium', alpha=0.4)
     fig.savefig(os.path.join(config['General']['trading_directory'],
                              base + '.png'))
 
@@ -739,7 +755,7 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
                       fc=bbox_color))
 
 
-def add_errors(error_series, axlist):
+def add_errors(error_series, axlist): # TODO: rename
     """
     Add error messages to the top of the first plot in axlist.
 
@@ -761,8 +777,24 @@ def add_errors(error_series, axlist):
             errors = errors + f'\n{index + 1}. {value}'
 
     if errors:
-        bottom, top = axlist[0].get_ylim()
-        axlist[0].text(0, top, errors, alpha=0.8, va='top')
+
+        index = 6               # TODO: use last panel
+        index = 4
+        bottom, top = axlist[index].get_ylim()
+        delta = 2
+        delta = 1.2
+        axlist[index].text(delta,
+                           # bottom,
+                           bottom + 0.07 * (top - bottom),
+                           errors, alpha=0.8,
+                           # backgroundcolor='#242424',
+                           backgroundcolor='red',
+                           # ha='left',
+                           # linespacing=2.0,
+                           # multialignment='right',
+                           va='bottom',
+                           # va='baseline',
+                           )
 
 
 def check_charts(config, charts):
