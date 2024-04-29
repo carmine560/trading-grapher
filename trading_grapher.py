@@ -20,20 +20,13 @@ import file_utilities
 
 
 def main():
-    """
-    Parse trade dates, save market data, plot charts, and check charts.
-
-    This function parses the command-line arguments for trade dates. For
-    each date, it retrieves the corresponding trades from the journal,
-    saves the market data, and plots the trading chart. After processing
-    all dates, it checks the charts for any discrepancies.
-    """
+    """Parse trade dates, save market data, plot charts, and check charts."""
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         '-C', action='store_true',
         help='check configuration changes and exit')
-    parser.add_argument('dates', nargs='*',
+    parser.add_argument('%Y-%m-%d', nargs='*',
                         default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
                         help='specify dates')
     args = parser.parse_args()
@@ -63,23 +56,7 @@ def main():
 
 
 def configure(config_path, can_interpolate=True, can_override=True):
-    """
-    Get the configuration parser object with the set up configuration.
-
-    This function initializes a configuration parser object based on the
-    provided configuration file path. It allows optional interpolation
-    and overriding of existing configuration settings.
-
-    Args:
-        config_path (str): The path to the configuration file.
-        can_interpolate (bool, optional): If True, enable interpolation.
-            Defaults to True.
-        can_override (bool, optional): If True, allow overriding of
-            existing configuration settings. Defaults to True.
-
-    Returns:
-        ConfigParser: The configuration parser object.
-    """
+    """Get the configuration parser object with the set up configuration."""
     if can_interpolate:
         config = configparser.ConfigParser(
             interpolation=configparser.ExtendedInterpolation())
@@ -129,23 +106,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
 
 
 def get_variables(config, symbol, entry_date, number):
-    """
-    Generate base string, market data path, and localize entry date.
-
-    This function generates a base string using the entry date, trade
-    number, and symbol. It also constructs the path to the market data
-    file and localizes the entry date to the specified timezone.
-
-    Args:
-        config (ConfigParser): The configuration parser object.
-        symbol (str): The trading symbol.
-        entry_date (datetime): The date of the trade entry.
-        number (int): The number of the trade.
-
-    Returns:
-        tuple: A tuple containing the base string, the path to the
-            market data, and the localized entry date.
-    """
+    """Generate base string, market data path, and localize entry date."""
     base = f"{entry_date.strftime('%Y-%m-%d')}-{int(number):02}-{symbol}"
     market_data = os.path.join(
         config['General']['trading_directory'],
@@ -156,25 +117,7 @@ def get_variables(config, symbol, entry_date, number):
 
 
 def save_market_data(config, trade):
-    """
-    Save historical market data for a given symbol to a CSV file.
-
-    Retrieves historical market data for a given trading symbol from
-    Yahoo Finance, processes it, and saves it to a CSV file. The data
-    includes open, high, low, close, and volume information. The
-    function checks if the data is up-to-date and only retrieves new
-    data if necessary.
-
-    Args:
-        config (ConfigParser): A ConfigParser instance containing the
-            configuration settings.
-        trade (Series): A pandas Series representing a trade entry with
-            the following keys:
-            - 'entry_date' (datetime): The date of the trade entry.
-            - 'number' (int): The number of the trade.
-            - 'symbol' (str): The trading symbol.
-            - 'exit_time' (time): The time of the trade exit.
-    """
+    """Save historical market data for a given symbol to a CSV file."""
     entry_date = trade[config['Trading Journal']['entry_date']]
     number = trade[config['Trading Journal']['number']]
     symbol = trade[config['Trading Journal']['symbol']]
@@ -256,48 +199,22 @@ def save_market_data(config, trade):
 
 
 def plot_chart(config, trade):
-    """
-    Plot a trading chart with entry and exit points, and indicators.
-
-    Generates a trading chart for a given symbol, with markers for entry
-    and exit points, and plots for various technical indicators. It also
-    adds tooltips for the entry and exit points, and any notes.
-
-    Args:
-        config (ConfigParser): A ConfigParser instance containing the
-            configuration settings.
-        trade (Series): A pandas Series representing a trade entry with
-            the following keys:
-            - 'entry_date' (datetime): The date of the trade entry.
-            - 'number' (int): The number of the trade.
-            - 'entry_time' (str): The time of the trade entry.
-            - 'symbol' (str): The trading symbol.
-            - 'trade_type' (str): The type of the trade ('long' or
-              'short').
-            - 'entry_price' (float): The price at the trade entry.
-            - 'tactic' (str): The trading tactic used.
-            - 'entry_reason' (str): The reason for the trade entry.
-            - 'exit_date' (datetime): The date of the trade exit.
-            - 'exit_time' (str): The time of the trade exit.
-            - 'exit_price' (float): The price at the trade exit.
-            - 'exit_reason' (str): The reason for the trade exit.
-            - 'change' (float): The price change from the trade entry to
-              the exit.
-            - 'note_1' to 'note_10' (str): Potential notes in the trade.
-    """
-    entry_date = trade[config['Trading Journal']['entry_date']]
+    """Plot a trading chart with entry and exit points, and indicators."""
     number = trade[config['Trading Journal']['number']]
-    entry_time = trade[config['Trading Journal']['entry_time']]
     symbol = trade[config['Trading Journal']['symbol']]
     trade_type = trade[config['Trading Journal']['trade_type']]
-    entry_price = trade[config['Trading Journal']['entry_price']]
     tactic = trade[config['Trading Journal']['tactic']]
+    entry_date = trade[config['Trading Journal']['entry_date']]
+    entry_time = trade[config['Trading Journal']['entry_time']]
+    entry_price = trade[config['Trading Journal']['entry_price']]
     entry_reason = trade[config['Trading Journal']['entry_reason']]
     exit_date = trade[config['Trading Journal']['exit_date']]
     exit_time = trade[config['Trading Journal']['exit_time']]
     exit_price = trade[config['Trading Journal']['exit_price']]
     exit_reason = trade[config['Trading Journal']['exit_reason']]
     change = trade[config['Trading Journal']['change']]
+    # TODO: add optional_ prefix
+    # TODO: use get()
     note_1 = trade[config['Trading Journal']['note_1']]
     note_2 = trade[config['Trading Journal']['note_2']]
     note_3 = trade[config['Trading Journal']['note_3']]
@@ -314,7 +231,7 @@ def plot_chart(config, trade):
 
     try:
         style = importlib.import_module(
-            f"_styles.{config['General']['style']}").style
+            f"styles.{config['General']['style']}").style
     except ModuleNotFoundError as e:
         print(e)
         sys.exit(1)
@@ -400,6 +317,7 @@ def plot_chart(config, trade):
 
     panel += 1
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
+                           # TODO: modify width
                            tight_layout=True, figsize=(1152 / 100, 648 / 100),
                            style=style,
                            scale_padding={'top': 0, 'right': 0.05,
@@ -452,20 +370,13 @@ def plot_chart(config, trade):
                      style['tg_tooltip_color'], exit_color, last_primary_axis,
                      formalized, exit_timestamp)
 
-    # TODO: Trade 1 for 9501 at 2024-04-24 09:06:13
-    acronym = create_acronym(tactic)
-    if acronym:
-        title = base + ', ' + acronym
-    else:
-        title = base
-
-    note_series = pd.Series([note_1, note_2, note_3, note_4, note_5, note_6,
-                             note_7, note_8, note_9, note_10]).dropna()
-
-    y_offset_ratio = 0.07
-    title = 'Trade 1 for 9501 using FR at 2024-04-24 09:06:13'
-
-    add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
+    add_text(panel, axlist, x_offset, 0.07,
+             (f'Trade {number} for {symbol}'
+              f' using {trade_type.title()} {create_acronym(tactic)}'
+              f" at {entry_date.strftime('%Y-%m-%d')}"
+              f" {entry_time.strftime('%H:%M')}"),
+             pd.Series([note_1, note_2, note_3, note_4, note_5, note_6, note_7,
+                        note_8, note_9, note_10]).dropna(),
              style['facecolor'])
 
     fig.savefig(os.path.join(config['General']['trading_directory'],
@@ -473,25 +384,7 @@ def plot_chart(config, trade):
 
 
 def add_ma(config, formalized, mpf, addplot, style, ma='ema'):
-    """
-    Add Exponential Moving Average (EMA) plots to the existing plots.
-
-    This function calculates the EMA for the given data with different
-    spans, and creates plots for these values which are added to the
-    existing plots.
-
-    Args:
-        config (ConfigParser): The configuration parser object.
-        formalized (DataFrame): The DataFrame containing the closing
-            prices.
-        mpf (module): The mplfinance module used for creating the plots.
-        addplot (list): The list of existing plots to which the new
-            plots will be added.
-        style (dict): The custom style parameters for the stochastic
-            plots.
-        ma (str, optional): The type of moving average to use. Defaults
-            to 'ema'.
-    """
+    """Add Exponential Moving Average (EMA) plots to the existing plots."""
     if ma == 'ema':
         ma_1 = ema(formalized.close, 5)
         ma_2 = ema(formalized.close, 25)
@@ -505,30 +398,7 @@ def add_ma(config, formalized, mpf, addplot, style, ma='ema'):
 
 
 def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
-    """
-    Add Moving Average Convergence Divergence (MACD) plots to the panel.
-
-    This function calculates the MACD values for the given data, adds
-    them to the formalized DataFrame, and creates plots for these values
-    which are added to the given panel. The type of moving average used
-    ('ema' or 'tema') can be specified.
-
-    Args:
-        config (ConfigParser): The configuration parser object.
-        formalized (DataFrame): The DataFrame containing the closing
-            prices.
-        panel (int): The panel number to which the plots will be added.
-        mpf (module): The mplfinance module used for creating the plots.
-        addplot (list): The list of existing plots to which the new
-            plots will be added.
-        style (dict): The custom style parameters for the stochastic
-            plots.
-        ma (str, optional): The type of moving average to use ('ema' or
-            'tema'). Defaults to 'ema'.
-
-    Returns:
-        int: The updated panel number.
-    """
+    """Add Moving Average Convergence Divergence (MACD) plots to the panel."""
     if ma == 'ema':
         macd = ema(formalized.close, 12) - ema(formalized.close, 26)
         ylabel = 'MACD'
@@ -552,42 +422,14 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
 
 
 def ema(series, span):
-    """
-    Calculate the Exponential Moving Average (EMA) of a series.
-
-    This function computes the EMA of a given series. The EMA is a type
-    of moving average that gives more weight to recent prices, which can
-    make it more responsive to new information.
-
-    Args:
-        series (Series): The time series to compute the EMA of.
-        span (int): The span of periods to consider for the moving
-            average.
-
-    Returns:
-        Series: The EMA of the input series.
-    """
+    """Calculate the Exponential Moving Average (EMA) of a series."""
     ema = series.ewm(span=span).mean()
     ema.iloc[:span - 1] = np.nan
     return ema
 
 
 def tema(series, span):
-    """
-    Calculate the Triple Exponential Moving Average (TEMA) of a series.
-
-    This function computes the TEMA of a given series. The TEMA is a
-    technical indicator used to smooth price fluctuations and filter out
-    volatility.
-
-    Args:
-        series (Series): The time series to compute the TEMA of.
-        span (int): The span of periods to consider for the moving
-            average.
-
-    Returns:
-        Series: The TEMA of the input series.
-    """
+    """Calculate the Triple Exponential Moving Average (TEMA) of a series."""
     ema_1 = ema(series, span)
     ema_2 = ema(ema_1, span)
     ema_3 = ema(ema_2, span)
@@ -597,27 +439,7 @@ def tema(series, span):
 
 
 def add_stochastics(config, formalized, panel, mpf, addplot, style):
-    """
-    Add stochastic oscillator plots to the given panel.
-
-    This function calculates the stochastic oscillator values for the
-    given data, adds them to the formalized DataFrame, and creates plots
-    for these values which are added to the given panel.
-
-    Args:
-        config (ConfigParser): The configuration parser object.
-        formalized (DataFrame): The DataFrame containing the high, low,
-            and close prices.
-        panel (int): The panel number to which the plots will be added.
-        mpf (module): The mplfinance module used for creating the plots.
-        addplot (list): The list of existing plots to which the new
-            plots will be added.
-        style (dict): The custom style parameters for the stochastic
-            plots.
-
-    Returns:
-        int: The updated panel number.
-    """
+    """Add stochastic oscillator plots to the given panel."""
     k = 5
     d = 3
     smooth_k = 3
@@ -644,26 +466,7 @@ def add_stochastics(config, formalized, panel, mpf, addplot, style):
 
 
 def stochastics(high, low, close, k, d, smooth_k):
-    """
-    Calculate the stochastic oscillator values for a given dataset.
-
-    This function computes the stochastic oscillator values (K and D)
-    for a given dataset. The stochastic oscillator is a momentum
-    indicator comparing a particular closing price of a security to a
-    range of its prices over a certain period of time.
-
-    Args:
-        high (Series): The high prices for each period.
-        low (Series): The low prices for each period.
-        close (Series): The closing prices for each period.
-        k (int): The lookback period for the %K line.
-        d (int): The smoothing period for the %D line.
-        smooth_k (int): The smoothing period for the %K line.
-
-    Returns:
-        DataFrame: A DataFrame with the stochastic oscillator values (%K
-            and %D).
-    """
+    """Calculate the stochastic oscillator values for a given dataset."""
     lowest_low = low.rolling(k).min()
     highest_high = high.rolling(k).max()
 
@@ -681,20 +484,7 @@ def stochastics(high, low, close, k, d, smooth_k):
 
 
 def create_acronym(phrase):
-    """
-    Generate an acronym from the given phrase.
-
-    This function takes a string phrase, splits it into words, and
-    constructs an acronym by taking the first letter of each word and
-    capitalizing it.
-
-    Args:
-        phrase (str): The phrase to convert into an acronym.
-
-    Returns:
-        str: The acronym created from the initial letters of the words
-            in the phrase.
-    """
+    """Generate an acronym from the given phrase."""
     if isinstance(phrase, str):
         acronym = ''
         for word in re.split(r'[\W_]+', phrase):
@@ -705,29 +495,7 @@ def create_acronym(phrase):
 
 def add_tooltips(config, axlist, x_offset, price, string, color, bbox_color,
                  last_primary_axis=None, formalized=None, timestamp=None):
-    """
-    Add tooltips to the specified axes list.
-
-    This function adds tooltips to the first plot in the axlist and, if
-    a timestamp is provided, to the last primary axis. The tooltips are
-    formatted with the provided text, color, and alpha values.
-
-    Args:
-        config (ConfigParser): The configuration parser object.
-        axlist (list): A list of axes objects to which the tooltips will
-            be added.
-        x_offset (float): The horizontal offset for placing the tooltip.
-        price (float): The price at which the tooltip will be placed.
-        string (str): The text to be displayed in the tooltip.
-        color (str): The color of the tooltip.
-        bbox_color (str): The color of the tooltip bounding box.
-        last_primary_axis (int, optional): The index of the last primary
-            axis. Defaults to None.
-        formalized (DataFrame, optional): A pandas DataFrame with a
-            timestamp index. Defaults to None.
-        timestamp (datetime, optional): The timestamp at which the
-            tooltip will be placed. Defaults to None.
-    """
+    """Add tooltips to the specified axes list."""
     alpha = 0.8
     bbox_alpha = 0.6
 
@@ -748,28 +516,8 @@ def add_tooltips(config, axlist, x_offset, price, string, color, bbox_color,
 
 def add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
              bbox_color):
-    """
-    Add a title and notes to the top of the specified plot in axlist.
-
-    This function iterates over the items in note_series, formats them
-    into a string, and if any notes exist, adds them to the top of the
-    specified plot in axlist. Additionally, it adds the provided title
-    at the top of the plot.
-
-    Args:
-        panel (int): The index of the panel (used to determine the
-            target axis).
-        axlist (list): A list of axes objects to which the notes will be
-            added.
-        x_offset (float): The horizontal offset for positioning the
-            text.
-        y_offset_ratio (float): The vertical offset ratio for
-            positioning the text.
-        title (str): The title to be added.
-        note_series (Series): A pandas Series containing notes.
-        bbox_color (str): The color for the bounding box (if errors
-            exist).
-    """
+    # TODO: fix docstring
+    """Add a title and notes to the top of the specified panel."""
     # Use the last panel to prevent other panels from overwriting the
     # text.
     axis_index = 2 * panel
@@ -794,19 +542,7 @@ def add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
 
 
 def check_charts(config, charts):
-    """
-    Validate charts in the trading directory and print invalid ones.
-
-    This function checks for '.png' files in the trading directory that
-    are not referenced in the journal's chart values. It also verifies
-    that referenced charts in the journal exist in the trading
-    directory. Any discrepancies found are printed to the console.
-
-    Args:
-        config (ConfigParser): A ConfigParser instance containing the
-            configuration settings.
-        charts (Series): A pandas Series containing chart references.
-    """
+    """Validate charts in the trading directory and print invalid ones."""
     for f in os.listdir(config['General']['trading_directory']):
         if f.endswith('.png') and f not in charts.values:
             print(os.path.join(config['General']['trading_directory'], f))
