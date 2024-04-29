@@ -109,18 +109,16 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'exit_price': 'Exit price',
         'exit_reason': 'Exit reason',
         'change': 'Change',
-        # TODO: rename to note
-        # TODO: add title for notes
-        'error_1': 'Error 1',
-        'error_2': 'Error 2',
-        'error_3': 'Error 3',
-        'error_4': 'Error 4',
-        'error_5': 'Error 5',
-        'error_6': 'Error 6',
-        'error_7': 'Error 7',
-        'error_8': 'Error 8',
-        'error_9': 'Error 9',
-        'error_10': 'Error 10',
+        'note_1': 'Note 1',
+        'note_2': 'Note 2',
+        'note_3': 'Note 3',
+        'note_4': 'Note 4',
+        'note_5': 'Note 5',
+        'note_6': 'Note 6',
+        'note_7': 'Note 7',
+        'note_8': 'Note 8',
+        'note_9': 'Note 9',
+        'note_10': 'Note 10',
         'chart': 'Chart'}
 
     if can_override:
@@ -263,7 +261,7 @@ def plot_chart(config, trade):
 
     Generates a trading chart for a given symbol, with markers for entry
     and exit points, and plots for various technical indicators. It also
-    adds tooltips for the entry and exit points, and any errors.
+    adds tooltips for the entry and exit points, and any notes.
 
     Args:
         config (ConfigParser): A ConfigParser instance containing the
@@ -285,8 +283,7 @@ def plot_chart(config, trade):
             - 'exit_reason' (str): The reason for the trade exit.
             - 'change' (float): The price change from the trade entry to
               the exit.
-            - 'error_1' to 'error_10' (str): Potential errors in the
-              trade.
+            - 'note_1' to 'note_10' (str): Potential notes in the trade.
     """
     entry_date = trade[config['Trading Journal']['entry_date']]
     number = trade[config['Trading Journal']['number']]
@@ -301,16 +298,16 @@ def plot_chart(config, trade):
     exit_price = trade[config['Trading Journal']['exit_price']]
     exit_reason = trade[config['Trading Journal']['exit_reason']]
     change = trade[config['Trading Journal']['change']]
-    error_1 = trade[config['Trading Journal']['error_1']]
-    error_2 = trade[config['Trading Journal']['error_2']]
-    error_3 = trade[config['Trading Journal']['error_3']]
-    error_4 = trade[config['Trading Journal']['error_4']]
-    error_5 = trade[config['Trading Journal']['error_5']]
-    error_6 = trade[config['Trading Journal']['error_6']]
-    error_7 = trade[config['Trading Journal']['error_7']]
-    error_8 = trade[config['Trading Journal']['error_8']]
-    error_9 = trade[config['Trading Journal']['error_9']]
-    error_10 = trade[config['Trading Journal']['error_10']]
+    note_1 = trade[config['Trading Journal']['note_1']]
+    note_2 = trade[config['Trading Journal']['note_2']]
+    note_3 = trade[config['Trading Journal']['note_3']]
+    note_4 = trade[config['Trading Journal']['note_4']]
+    note_5 = trade[config['Trading Journal']['note_5']]
+    note_6 = trade[config['Trading Journal']['note_6']]
+    note_7 = trade[config['Trading Journal']['note_7']]
+    note_8 = trade[config['Trading Journal']['note_8']]
+    note_9 = trade[config['Trading Journal']['note_9']]
+    note_10 = trade[config['Trading Journal']['note_10']]
 
     base, market_data, entry_date = get_variables(config, symbol, entry_date,
                                                   number)
@@ -405,7 +402,8 @@ def plot_chart(config, trade):
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
                            tight_layout=True, figsize=(1152 / 100, 648 / 100),
                            style=style,
-                           scale_padding={'top': 0, 'right': 0, 'bottom': 1.5},
+                           scale_padding={'top': 0, 'right': 0.05,
+                                          'bottom': 1.5},
                            scale_width_adjustment=dict(candle=1.5),
                            hlines=hlines, addplot=addplot, returnfig=True,
                            closefig=True, volume_panel=panel)
@@ -426,11 +424,13 @@ def plot_chart(config, trade):
                                   color=exit_color, linestyle='dotted',
                                   linewidth=1, alpha=marker_coordinate_alpha)
 
+    x_offset = 1.2
+
     if previous_close:
         if current_open != entry_price and current_open != exit_price:
             delta = current_open - previous_close
             string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-            add_tooltips(config, axlist, current_open, string,
+            add_tooltips(config, axlist, x_offset, current_open, string,
                          style['tg_tooltip_color'],
                          style['rc']['axes.edgecolor'])
 
@@ -438,7 +438,7 @@ def plot_chart(config, trade):
     if not pd.isna(entry_price):
         acronym = create_acronym(entry_reason)
         if acronym:
-            add_tooltips(config, axlist, entry_price, acronym,
+            add_tooltips(config, axlist, x_offset, entry_price, acronym,
                          style['tg_tooltip_color'], entry_color,
                          last_primary_axis, formalized, entry_timestamp)
     if not pd.isna(exit_price):
@@ -448,14 +448,9 @@ def plot_chart(config, trade):
         else:
             string = f'{result:.1f}, {change:.2f}%'
 
-        add_tooltips(config, axlist, exit_price, string,
+        add_tooltips(config, axlist, x_offset, exit_price, string,
                      style['tg_tooltip_color'], exit_color, last_primary_axis,
                      formalized, exit_timestamp)
-
-    error_series = pd.Series(
-        [error_1, error_2, error_3, error_4, error_5, error_6, error_7,
-         error_8, error_9, error_10]).dropna()
-    add_errors(error_series, axlist)
 
     # TODO: Trade 1 for 9501 at 2024-04-24 09:06:13
     acronym = create_acronym(tactic)
@@ -464,20 +459,15 @@ def plot_chart(config, trade):
     else:
         title = base
 
-    # # TODO: create function
-    # index = 2
-    # bottom, top = axlist[index].get_ylim()
-    # axlist[index].text(1.2,
-    #                    # top,
-    #                    top - 0.07 * (top - bottom),
-    #                    # top - 1.2,
-    #                    'Trade 1 for 9501 at 2024-04-24 09:06:13', alpha=0.8,
-    #                    backgroundcolor='blue',
-    #                    # weight='bold',
-    #                    va='top',
-    #                    )
+    note_series = pd.Series([note_1, note_2, note_3, note_4, note_5, note_6,
+                             note_7, note_8, note_9, note_10]).dropna()
 
-    # fig.suptitle(title, size='medium', alpha=0.4)
+    y_offset_ratio = 0.07
+    title = 'Trade 1 for 9501 using FR at 2024-04-24 09:06:13'
+
+    add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
+             style['facecolor'])
+
     fig.savefig(os.path.join(config['General']['trading_directory'],
                              base + '.png'))
 
@@ -713,7 +703,7 @@ def create_acronym(phrase):
         return acronym
 
 
-def add_tooltips(config, axlist, price, string, color, bbox_color,
+def add_tooltips(config, axlist, x_offset, price, string, color, bbox_color,
                  last_primary_axis=None, formalized=None, timestamp=None):
     """
     Add tooltips to the specified axes list.
@@ -726,13 +716,14 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
         config (ConfigParser): The configuration parser object.
         axlist (list): A list of axes objects to which the tooltips will
             be added.
+        x_offset (float): The horizontal offset for placing the tooltip.
         price (float): The price at which the tooltip will be placed.
         string (str): The text to be displayed in the tooltip.
         color (str): The color of the tooltip.
         bbox_color (str): The color of the tooltip bounding box.
         last_primary_axis (int, optional): The index of the last primary
             axis. Defaults to None.
-        formalized (pd.DataFrame, optional): A pandas DataFrame with a
+        formalized (DataFrame, optional): A pandas DataFrame with a
             timestamp index. Defaults to None.
         timestamp (datetime, optional): The timestamp at which the
             tooltip will be placed. Defaults to None.
@@ -741,8 +732,8 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
     bbox_alpha = 0.6
 
     axlist[0].text(
-        -1.2, price, string, alpha=alpha, c=color, size='small', ha='right',
-        va='center',
+        -x_offset, price, string, alpha=alpha, c=color, size='small',
+        ha='right', va='center',
         bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
                   fc=bbox_color))
     if timestamp:
@@ -755,71 +746,51 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
                       fc=bbox_color))
 
 
-def add_errors(error_series, axlist): # TODO: rename
+def add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
+             bbox_color):
     """
-    Add error messages to the top of the first plot in axlist.
+    Add a title and notes to the top of the specified plot in axlist.
 
-    This function iterates over the items in error_series, formats them
-    into a string, and if any errors exist, adds them to the top of the
-    first plot in axlist.
+    This function iterates over the items in note_series, formats them
+    into a string, and if any notes exist, adds them to the top of the
+    specified plot in axlist. Additionally, it adds the provided title
+    at the top of the plot.
 
     Args:
-        error_series (Series): A pandas Series containing error
-            messages.
-        axlist (list): A list of axes objects to which the error
-            messages will be added.
+        panel (int): The index of the panel (used to determine the
+            target axis).
+        axlist (list): A list of axes objects to which the notes will be
+            added.
+        x_offset (float): The horizontal offset for positioning the
+            text.
+        y_offset_ratio (float): The vertical offset ratio for
+            positioning the text.
+        title (str): The title to be added.
+        note_series (Series): A pandas Series containing notes.
+        bbox_color (str): The color for the bounding box (if errors
+            exist).
     """
+    # Use the last panel to prevent other panels from overwriting the
+    # text.
+    axis_index = 2 * panel
+    bottom, top = axlist[axis_index].get_ylim()
 
-    # TODO: create function
-    panel_index = 2
-    panel_index = 6
-    bottom, top = axlist[panel_index].get_ylim()
-    axlist[panel_index].text(1.2,
-                             # top,
-                             3 * top - 0.07 * (top - bottom),
-                             # top - 1.2,
-                             'Trade 1 for 9501 at 2024-04-24 09:06:13',
-                             alpha=0.8,
-                             # backgroundcolor='blue',
-                             weight='bold',
-                             va='top',
-                             # zorder=1,
-                             )
+    axlist[axis_index].text(x_offset,
+                            panel * top - y_offset_ratio * (top - bottom),
+                            title, weight='bold', va='top')
 
     errors = ''
-    for note_index, value in error_series.items():
+    for note_index, value in note_series.items():
         if note_index == 0:
-            # errors = f'Errors:\n{note_index + 1}. {value}'
             errors = f'\n{note_index + 1}. {value}'
         else:
             errors = f'{errors}\n{note_index + 1}. {value}'
 
     if errors:
-
-        # index = 4
-        # index = 6               # TODO: use last panel
-        # bottom, top = axlist[index].get_ylim()
-        # delta = 2
-        delta = 1.2
-        axlist[panel_index].text(
-            delta,
-            # bottom,
-            # bottom + 0.07 * (top - bottom),
-            3 * top - 0.07 * (top - bottom),
-            errors, alpha=0.8,
-            # backgroundcolor='#242424',
-            # backgroundcolor='red',
-            # ha='left',
-            # linespacing=2.0,
-            # multialignment='right',
-            # va='bottom',
-            va='top',
-            # va='baseline',
-            zorder=0,
-            bbox=dict(alpha=0.8,
-                      ec='none',
-                      fc='#242424')
-        )
+        axlist[axis_index].text(x_offset,
+                                panel * top - y_offset_ratio * (top - bottom),
+                                errors, va='top', zorder=0,
+                                bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
 
 
 def check_charts(config, charts):
