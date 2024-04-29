@@ -464,18 +464,18 @@ def plot_chart(config, trade):
     else:
         title = base
 
-    # TODO: create function
-    index = 2
-    bottom, top = axlist[index].get_ylim()
-    axlist[index].text(1.2,
-                       # top,
-                       top - 0.07 * (top - bottom),
-                       # top - 1.2,
-                       'Trade 1 for 9501 at 2024-04-24 09:06:13', alpha=0.8,
-                       backgroundcolor='blue',
-                       # weight='bold',
-                       va='top',
-                       )
+    # # TODO: create function
+    # index = 2
+    # bottom, top = axlist[index].get_ylim()
+    # axlist[index].text(1.2,
+    #                    # top,
+    #                    top - 0.07 * (top - bottom),
+    #                    # top - 1.2,
+    #                    'Trade 1 for 9501 at 2024-04-24 09:06:13', alpha=0.8,
+    #                    backgroundcolor='blue',
+    #                    # weight='bold',
+    #                    va='top',
+    #                    )
 
     # fig.suptitle(title, size='medium', alpha=0.4)
     fig.savefig(os.path.join(config['General']['trading_directory'],
@@ -769,32 +769,57 @@ def add_errors(error_series, axlist): # TODO: rename
         axlist (list): A list of axes objects to which the error
             messages will be added.
     """
+
+    # TODO: create function
+    panel_index = 2
+    panel_index = 6
+    bottom, top = axlist[panel_index].get_ylim()
+    axlist[panel_index].text(1.2,
+                             # top,
+                             3 * top - 0.07 * (top - bottom),
+                             # top - 1.2,
+                             'Trade 1 for 9501 at 2024-04-24 09:06:13',
+                             alpha=0.8,
+                             # backgroundcolor='blue',
+                             weight='bold',
+                             va='top',
+                             # zorder=1,
+                             )
+
     errors = ''
-    for index, value in error_series.items():
-        if index == 0:
-            errors = f'Errors:\n{index + 1}. {value}'
+    for note_index, value in error_series.items():
+        if note_index == 0:
+            # errors = f'Errors:\n{note_index + 1}. {value}'
+            errors = f'\n{note_index + 1}. {value}'
         else:
-            errors = errors + f'\n{index + 1}. {value}'
+            errors = f'{errors}\n{note_index + 1}. {value}'
 
     if errors:
 
-        index = 6               # TODO: use last panel
-        index = 4
-        bottom, top = axlist[index].get_ylim()
-        delta = 2
+        # index = 4
+        # index = 6               # TODO: use last panel
+        # bottom, top = axlist[index].get_ylim()
+        # delta = 2
         delta = 1.2
-        axlist[index].text(delta,
-                           # bottom,
-                           bottom + 0.07 * (top - bottom),
-                           errors, alpha=0.8,
-                           # backgroundcolor='#242424',
-                           backgroundcolor='red',
-                           # ha='left',
-                           # linespacing=2.0,
-                           # multialignment='right',
-                           va='bottom',
-                           # va='baseline',
-                           )
+        axlist[panel_index].text(
+            delta,
+            # bottom,
+            # bottom + 0.07 * (top - bottom),
+            3 * top - 0.07 * (top - bottom),
+            errors, alpha=0.8,
+            # backgroundcolor='#242424',
+            # backgroundcolor='red',
+            # ha='left',
+            # linespacing=2.0,
+            # multialignment='right',
+            # va='bottom',
+            va='top',
+            # va='baseline',
+            zorder=0,
+            bbox=dict(alpha=0.8,
+                      ec='none',
+                      fc='#242424')
+        )
 
 
 def check_charts(config, charts):
