@@ -45,13 +45,26 @@ def main():
     trading_journal = pd.read_excel(
         config['General']['trading_path'],
         sheet_name=config['General']['trading_sheet'])
+    trading_journal_columns = ['number', 'symbol', 'trade_type', 'tactic',
+                               'entry_date', 'entry_time', 'entry_price',
+                               'entry_reason', 'exit_date', 'exit_time',
+                               'exit_price', 'exit_reason', 'change']
+    for i in range(1, 11):
+        trading_journal_columns.append(f'optional_note_{i}')
+
     for date in pd.to_datetime(args.dates):
         trades = trading_journal.loc[
             trading_journal[config['Trading Journal']['entry_date']] == date]
         for _, trade in trades.iterrows():
-            save_market_data(config, trade)
-            plot_chart(config, trade)
+            trade_data = {}
+            for column in trading_journal_columns:
+                trade_data[column] = trade.get(
+                    config['Trading Journal'][column])
 
+            save_market_data(config, trade_data)
+            plot_chart(config, trade_data)
+
+    # TODO: add if-statement
     check_charts(config, trading_journal[config['Trading Journal']['chart']])
 
 
@@ -63,6 +76,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
     else:
         config = configparser.ConfigParser(interpolation=None)
 
+    # TODO: add Indicators or MACD and Stochastics
     config['General'] = {
         # TODO: add option '2022-12-14'
         'trading_directory': os.path.join(os.path.expanduser('~'),
@@ -86,19 +100,9 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'exit_price': 'Exit price',
         'exit_reason': 'Exit reason',
         'change': 'Change',
-        'optional_note_1': '',
-        'optional_note_2': '',
-        'optional_note_3': '',
-        'optional_note_4': '',
-        'optional_note_5': '',
-        'optional_note_6': '',
-        'optional_note_7': '',
-        'optional_note_8': '',
-        'optional_note_9': '',
-        'optional_note_10': '',
-        # TODO: add optional_ prefix
-        # TODO: use get()
         'chart': 'Chart'}
+    for i in range(1, 11):
+        config['Trading Journal'][f'optional_note_{i}'] = ''
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -118,21 +122,18 @@ def get_variables(config, symbol, entry_date, number):
     return base, market_data, entry_date
 
 
-def save_market_data(config, trade):
+def save_market_data(config, trade_data):
     """Save historical market data for a given symbol to a CSV file."""
-    # TODO: add trade_data
-    entry_date = trade[config['Trading Journal']['entry_date']]
-    number = trade[config['Trading Journal']['number']]
-    symbol = trade[config['Trading Journal']['symbol']]
-    exit_time = trade[config['Trading Journal']['exit_time']]
-
+    _, market_data, entry_date = get_variables(config, trade_data['symbol'],
+                                               trade_data['entry_date'],
+                                               trade_data['number'])
     PERIOD_IN_DAYS = 7
-    _, market_data, entry_date = get_variables(config, symbol, entry_date,
-                                               number)
-    delta = pd.Timestamp.now(
-        tz=config['Market Data']['time_zone']).normalize() - entry_date
-    last = modified_time = pd.Timestamp(
-        0, tz=config['Market Data']['time_zone'])
+
+    delta = (
+        pd.Timestamp.now(tz=config['Market Data']['time_zone']).normalize()
+        - entry_date)
+    last = modified_time = pd.Timestamp(0,
+                                        tz=config['Market Data']['time_zone'])
 
     if os.path.exists(market_data):
         formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
@@ -147,7 +148,7 @@ def save_market_data(config, trade):
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        my_share = share.Share(f'{symbol}.T')
+        my_share = share.Share(f"{trade_data['symbol']}.T")
         try:
             symbol_data = my_share.get_historical(
                 share.PERIOD_TYPE_DAY, PERIOD_IN_DAYS,
@@ -161,18 +162,20 @@ def save_market_data(config, trade):
         df.set_index('timestamp', inplace=True)
         df.index = df.index.tz_localize('UTC').tz_convert(
             config['Market Data']['time_zone'])
+        # TODO: configure q
         q = df.volume.quantile(0.99)
         df['volume'] = df['volume'].mask(df['volume'] > q, q)
 
         previous = df[df.index < entry_date]
-        if len(previous):
+        if previous:
             previous_date = pd.Timestamp.date(
                 previous.dropna().tail(1).index[0])
             previous_date = pd.Timestamp(previous_date,
                                          tz=config['Market Data']['time_zone'])
 
-        morning = pd.Timedelta(str(exit_time)) < pd.Timedelta(hours=12)
-        if morning and len(previous):
+        morning = (pd.Timedelta(str(trade_data['exit_time']))
+                   < pd.Timedelta(hours=12))
+        if morning and previous:
             start = previous_date + pd.Timedelta(hours=12, minutes=30)
             end = entry_date + pd.Timedelta(hours=11, minutes=29)
         else:
@@ -186,7 +189,7 @@ def save_market_data(config, trade):
         formalized = formalized.astype('float')
         formalized.update(df)
 
-        if morning and len(previous):
+        if morning and previous:
             start = previous_date + pd.Timedelta(hours=15)
             end = entry_date + pd.Timedelta(hours=8, minutes=59)
             exclusion = pd.date_range(start=start, end=end, freq='min')
@@ -201,22 +204,17 @@ def save_market_data(config, trade):
         formalized.to_csv(market_data)
 
 
-def plot_chart(config, trade):
+def plot_chart(config, trade_data):
     """Plot a trading chart with entry and exit points, and indicators."""
-    # TODO: move to main()
-    trade_data = {}
-    for column in ('number', 'symbol', 'trade_type', 'tactic', 'entry_date',
-                   'entry_time', 'entry_price', 'entry_reason', 'exit_date',
-                   'exit_time', 'exit_price', 'exit_reason', 'change',
-                   'optional_note_1', 'optional_note_2', 'optional_note_3',
-                   'optional_note_4', 'optional_note_5', 'optional_note_6',
-                   'optional_note_7', 'optional_note_8', 'optional_note_9',
-                   'optional_note_10'):
-        trade_data[column] = trade.get(config['Trading Journal'][column])
-
     base, market_data, entry_date = get_variables(config, trade_data['symbol'],
                                                   trade_data['entry_date'],
                                                   trade_data['number'])
+
+    if os.path.exists(market_data):
+        formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
+    else:
+        print(market_data, 'does not exist')
+        sys.exit(1)
 
     try:
         style = importlib.import_module(
@@ -225,24 +223,15 @@ def plot_chart(config, trade):
         print(e)
         sys.exit(1)
 
-    if os.path.exists(market_data):
-        formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
-    else:
-        print(market_data, 'does not exist')
-        sys.exit(1)
-
     entry_timestamp = exit_timestamp = None
     entry_color = style['tg_neutral_color']
-    addplot = []
-    hlines = []
-    colors = []
+    addplot = hlines = colors = []
 
     previous = formalized[formalized.index < entry_date]
-    previous_close = 0.0
-    current = formalized[formalized.index >= entry_date]
-    current_open = 0.0
+    current = formalized[entry_date <= formalized.index]
+    previous_close = current_open = 0.0
 
-    if len(previous.dropna()):
+    if previous.notnull().values.any():
         previous_close = previous.dropna().tail(1).close.iloc[0]
         current_open = current.dropna().head(1).open.iloc[0]
         hlines = [previous_close, current_open]
@@ -298,7 +287,7 @@ def plot_chart(config, trade):
 
     marker_coordinate_alpha = 0.4
 
-    if len(hlines) and len(colors):
+    if hlines and colors:
         hlines = dict(hlines=hlines, colors=colors, linestyle='dotted',
                       linewidths=1, alpha=marker_coordinate_alpha)
 
@@ -310,6 +299,7 @@ def plot_chart(config, trade):
                                           addplot, style)
 
     panel += 1
+    # TODO: use fill
     fig, axlist = mpf.plot(formalized, type='candle', volume=True,
                            # TODO: modify width
                            tight_layout=True, figsize=(1152 / 100, 648 / 100),
@@ -324,17 +314,20 @@ def plot_chart(config, trade):
     axlist[0].set_xticks(np.arange(left, right, 30))
     axlist[0].set_xticks(np.arange(left, right, 10), minor=True)
     axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
-    for i in range(len(axlist)):
-        if (i % 2) == 0:
-            axlist[i].grid(which='minor', alpha=0.2)
+
+    for index, _ in enumerate(axlist):
+        if (index % 2) == 0:
+            axlist[index].grid(which='minor', alpha=0.2)
             if entry_timestamp:
-                axlist[i].axvline(x=formalized.index.get_loc(entry_timestamp),
-                                  color=entry_color, linestyle='dotted',
-                                  linewidth=1, alpha=marker_coordinate_alpha)
+                axlist[index].axvline(
+                    x=formalized.index.get_loc(entry_timestamp),
+                    color=entry_color, linestyle='dotted', linewidth=1,
+                    alpha=marker_coordinate_alpha)
             if exit_timestamp:
-                axlist[i].axvline(x=formalized.index.get_loc(exit_timestamp),
-                                  color=exit_color, linestyle='dotted',
-                                  linewidth=1, alpha=marker_coordinate_alpha)
+                axlist[index].axvline(
+                    x=formalized.index.get_loc(exit_timestamp),
+                    color=exit_color, linestyle='dotted', linewidth=1,
+                    alpha=marker_coordinate_alpha)
 
     x_offset = 1.2
 
@@ -366,8 +359,8 @@ def plot_chart(config, trade):
                      last_primary_axis, formalized, exit_timestamp)
 
     notes = []
-    for i in range(1, 11):
-        note_column = trade_data[f'optional_note_{i}']
+    for index in range(1, 11):
+        note_column = trade_data[f'optional_note_{index}']
         if note_column:
             notes.append(note_column)
 
