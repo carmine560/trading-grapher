@@ -52,6 +52,13 @@ def main():
     for i in range(1, 11):
         trading_journal_columns.append(f'optional_note_{i}')
 
+    try:
+        style = importlib.import_module(
+            f"styles.{config['General']['style']}").style
+    except ModuleNotFoundError as e:
+        print(e)
+        sys.exit(1)
+
     for date in pd.to_datetime(args.dates):
         trades = trading_journal.loc[
             trading_journal[config['Trading Journal']['entry_date']] == date]
@@ -61,8 +68,15 @@ def main():
                 trade_data[column] = trade.get(
                     config['Trading Journal'][column])
 
-            save_market_data(config, trade_data)
-            plot_chart(config, trade_data)
+            market_data_path = os.path.join(
+                config['General']['trading_directory'],
+                (f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
+                 f"-{trade_data['symbol']}.csv"))
+            entry_date = trade_data['entry_date'].tz_localize(
+                config['Market Data']['time_zone'])
+
+            save_market_data(config, trade_data, market_data_path, entry_date)
+            plot_chart(config, trade_data, market_data_path, entry_date, style)
 
     # TODO: add if-statement
     check_charts(config, trading_journal[config['Trading Journal']['chart']])
@@ -86,23 +100,27 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'style': 'fluorite'}    # TODO: add ametrine
     config['Market Data'] = {
         'time_zone': 'Asia/Tokyo'}
+
     config['Trading Journal'] = {
-        'number': 'Number',
+        'number': 'Number',     # TODO: add optional_ prefix
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
-        'tactic': 'Tactic',
+        'tactic': 'Tactic',     # TODO: add optional_ prefix
         'entry_date': 'Entry date',
         'entry_time': 'Entry time',
         'entry_price': 'Entry price',
-        'entry_reason': 'Entry reason',
+        'entry_reason': 'Entry reason', # TODO: add optional_ prefix
         'exit_date': 'Exit date',
         'exit_time': 'Exit time',
         'exit_price': 'Exit price',
-        'exit_reason': 'Exit reason',
+        'exit_reason': 'Exit reason', # TODO: add optional_ prefix
         'change': 'Change',
-        'chart': 'Chart'}
+        'chart': 'Chart'}       # TODO: add optional_ prefix
     for i in range(1, 11):
         config['Trading Journal'][f'optional_note_{i}'] = ''
+
+    config['MACD'] = {}
+    config['Stochastics'] = {}
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -111,34 +129,19 @@ def configure(config_path, can_interpolate=True, can_override=True):
     return config
 
 
-def get_variables(config, symbol, entry_date, number):
-    """Generate base string, market data path, and localize entry date."""
-    base = f"{entry_date.strftime('%Y-%m-%d')}-{int(number):02}-{symbol}"
-    market_data = os.path.join(
-        config['General']['trading_directory'],
-        f"{entry_date.strftime('%Y-%m-%d')}-00-{symbol}.csv")
-    entry_date = entry_date.tz_localize(config['Market Data']['time_zone'])
-
-    return base, market_data, entry_date
-
-
-def save_market_data(config, trade_data):
+def save_market_data(config, trade_data, market_data_path, entry_date):
     """Save historical market data for a given symbol to a CSV file."""
-    _, market_data, entry_date = get_variables(config, trade_data['symbol'],
-                                               trade_data['entry_date'],
-                                               trade_data['number'])
     PERIOD_IN_DAYS = 7
-
     delta = (
         pd.Timestamp.now(tz=config['Market Data']['time_zone']).normalize()
         - entry_date)
     last = modified_time = pd.Timestamp(0,
                                         tz=config['Market Data']['time_zone'])
-
-    if os.path.exists(market_data):
-        formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
+    if os.path.exists(market_data_path):
+        formalized = pd.read_csv(market_data_path, index_col=0,
+                                 parse_dates=True)
         last = formalized.tail(1).index[0]
-        modified_time = pd.Timestamp(os.path.getmtime(market_data),
+        modified_time = pd.Timestamp(os.path.getmtime(market_data_path),
                                      tz=config['Market Data']['time_zone'],
                                      unit='s')
 
@@ -197,29 +200,23 @@ def save_market_data(config, trade_data):
         else:
             formalized = formalized.between_time('12:30:00', '11:29:00')
 
-        if formalized.isna().values.all():
-            print('values are missing')
+        if formalized.isna().values.all(): # TODO
+            print('Values are missing.')
             return
 
-        formalized.to_csv(market_data)
+        try:
+            formalized.to_csv(market_data_path)
+        except Exception as e:  # TODO
+            print(e)
+            sys.exit(1)
 
 
-def plot_chart(config, trade_data):
+def plot_chart(config, trade_data, market_data_path, entry_date, style):
     """Plot a trading chart with entry and exit points, and indicators."""
-    base, market_data, entry_date = get_variables(config, trade_data['symbol'],
-                                                  trade_data['entry_date'],
-                                                  trade_data['number'])
-
-    if os.path.exists(market_data):
-        formalized = pd.read_csv(market_data, index_col=0, parse_dates=True)
-    else:
-        print(market_data, 'does not exist')
-        sys.exit(1)
-
     try:
-        style = importlib.import_module(
-            f"styles.{config['General']['style']}").style
-    except ModuleNotFoundError as e:
+        formalized = pd.read_csv(market_data_path, index_col=0,
+                                 parse_dates=True)
+    except Exception as e:      # TODO
         print(e)
         sys.exit(1)
 
@@ -373,7 +370,9 @@ def plot_chart(config, trade_data):
              pd.Series(notes).dropna(), style['facecolor'])
 
     fig.savefig(os.path.join(config['General']['trading_directory'],
-                             base + '.png'))
+                             (f"{entry_date.strftime('%Y-%m-%d')}"
+                              f"-{int(trade_data['number']):02}"
+                              f"-{trade_data['symbol']}.png")))
 
 
 def add_ma(config, formalized, mpf, addplot, style, ma='ema'):
