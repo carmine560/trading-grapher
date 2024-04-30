@@ -26,9 +26,9 @@ def main():
     group.add_argument(
         '-C', action='store_true',
         help='check configuration changes and exit')
-    parser.add_argument('%Y-%m-%d', nargs='*',
+    parser.add_argument('dates', nargs='*',
                         default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
-                        help='specify dates')
+                        help='specify dates in the format %%Y-%%m-%%d')
     args = parser.parse_args()
 
     config_path = file_utilities.get_config_path(__file__)
@@ -73,29 +73,31 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Market Data'] = {
         'time_zone': 'Asia/Tokyo'}
     config['Trading Journal'] = {
-        'entry_date': 'Entry date',
         'number': 'Number',
-        'entry_time': 'Entry time',
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
-        'entry_price': 'Entry price',
         'tactic': 'Tactic',
+        'entry_date': 'Entry date',
+        'entry_time': 'Entry time',
+        'entry_price': 'Entry price',
         'entry_reason': 'Entry reason',
         'exit_date': 'Exit date',
         'exit_time': 'Exit time',
         'exit_price': 'Exit price',
         'exit_reason': 'Exit reason',
         'change': 'Change',
-        'note_1': 'Note 1',
-        'note_2': 'Note 2',
-        'note_3': 'Note 3',
-        'note_4': 'Note 4',
-        'note_5': 'Note 5',
-        'note_6': 'Note 6',
-        'note_7': 'Note 7',
-        'note_8': 'Note 8',
-        'note_9': 'Note 9',
-        'note_10': 'Note 10',
+        'optional_note_1': '',
+        'optional_note_2': '',
+        'optional_note_3': '',
+        'optional_note_4': '',
+        'optional_note_5': '',
+        'optional_note_6': '',
+        'optional_note_7': '',
+        'optional_note_8': '',
+        'optional_note_9': '',
+        'optional_note_10': '',
+        # TODO: add optional_ prefix
+        # TODO: use get()
         'chart': 'Chart'}
 
     if can_override:
@@ -118,6 +120,7 @@ def get_variables(config, symbol, entry_date, number):
 
 def save_market_data(config, trade):
     """Save historical market data for a given symbol to a CSV file."""
+    # TODO: add trade_data
     entry_date = trade[config['Trading Journal']['entry_date']]
     number = trade[config['Trading Journal']['number']]
     symbol = trade[config['Trading Journal']['symbol']]
@@ -200,34 +203,20 @@ def save_market_data(config, trade):
 
 def plot_chart(config, trade):
     """Plot a trading chart with entry and exit points, and indicators."""
-    number = trade[config['Trading Journal']['number']]
-    symbol = trade[config['Trading Journal']['symbol']]
-    trade_type = trade[config['Trading Journal']['trade_type']]
-    tactic = trade[config['Trading Journal']['tactic']]
-    entry_date = trade[config['Trading Journal']['entry_date']]
-    entry_time = trade[config['Trading Journal']['entry_time']]
-    entry_price = trade[config['Trading Journal']['entry_price']]
-    entry_reason = trade[config['Trading Journal']['entry_reason']]
-    exit_date = trade[config['Trading Journal']['exit_date']]
-    exit_time = trade[config['Trading Journal']['exit_time']]
-    exit_price = trade[config['Trading Journal']['exit_price']]
-    exit_reason = trade[config['Trading Journal']['exit_reason']]
-    change = trade[config['Trading Journal']['change']]
-    # TODO: add optional_ prefix
-    # TODO: use get()
-    note_1 = trade[config['Trading Journal']['note_1']]
-    note_2 = trade[config['Trading Journal']['note_2']]
-    note_3 = trade[config['Trading Journal']['note_3']]
-    note_4 = trade[config['Trading Journal']['note_4']]
-    note_5 = trade[config['Trading Journal']['note_5']]
-    note_6 = trade[config['Trading Journal']['note_6']]
-    note_7 = trade[config['Trading Journal']['note_7']]
-    note_8 = trade[config['Trading Journal']['note_8']]
-    note_9 = trade[config['Trading Journal']['note_9']]
-    note_10 = trade[config['Trading Journal']['note_10']]
+    # TODO: move to main()
+    trade_data = {}
+    for column in ('number', 'symbol', 'trade_type', 'tactic', 'entry_date',
+                   'entry_time', 'entry_price', 'entry_reason', 'exit_date',
+                   'exit_time', 'exit_price', 'exit_reason', 'change',
+                   'optional_note_1', 'optional_note_2', 'optional_note_3',
+                   'optional_note_4', 'optional_note_5', 'optional_note_6',
+                   'optional_note_7', 'optional_note_8', 'optional_note_9',
+                   'optional_note_10'):
+        trade_data[column] = trade.get(config['Trading Journal'][column])
 
-    base, market_data, entry_date = get_variables(config, symbol, entry_date,
-                                                  number)
+    base, market_data, entry_date = get_variables(config, trade_data['symbol'],
+                                                  trade_data['entry_date'],
+                                                  trade_data['number'])
 
     try:
         style = importlib.import_module(
@@ -259,47 +248,52 @@ def plot_chart(config, trade):
         hlines = [previous_close, current_open]
         colors = [style['rc']['axes.edgecolor'], style['rc']['axes.edgecolor']]
 
-    if trade_type == 'long':
+    if trade_data['trade_type'].lower() == 'long':
         marker = 'o'
-    elif trade_type == 'short':
+    elif trade_data['trade_type'].lower() == 'short':
         marker = 'D'
 
     marker_alpha = 0.2
 
-    if not pd.isna(entry_time) and not pd.isna(entry_price):
+    if (not pd.isna(trade_data['entry_time'])
+        and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
-        entry_timestamp = entry_date + pd.Timedelta(str(entry_time))
-        formalized.loc[entry_timestamp, 'entry_point'] = entry_price
+        entry_timestamp = (entry_date
+                           + pd.Timedelta(str(trade_data['entry_time'])))
+        formalized.loc[entry_timestamp, 'entry_point'] = (
+            trade_data['entry_price'])
         entry_apd = mpf.make_addplot(formalized.entry_point, type='scatter',
                                      markersize=100, marker=marker,
                                      color=entry_color, edgecolors='none',
                                      alpha=marker_alpha)
         addplot.append(entry_apd)
-        hlines.append(entry_price)
+        hlines.append(trade_data['entry_price'])
         colors.append(entry_color)
 
     result = 0.0
     exit_color = entry_color
-    if not pd.isna(exit_time) and not pd.isna(exit_price):
-        if trade_type == 'long':
-            result = exit_price - entry_price
-        elif trade_type == 'short':
-            result = entry_price - exit_price
+    if (not pd.isna(trade_data['exit_time'])
+        and not pd.isna(trade_data['exit_price'])):
+        if trade_data['trade_type'].lower() == 'long':
+            result = trade_data['exit_price'] - trade_data['entry_price']
+        elif trade_data['trade_type'].lower() == 'short':
+            result = trade_data['entry_price'] - trade_data['exit_price']
         if result > 0:
             exit_color = style['tg_profit_color']
         elif result < 0:
             exit_color = style['tg_loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
-        exit_date = exit_date.tz_localize(config['Market Data']['time_zone'])
-        exit_timestamp = exit_date + pd.Timedelta(str(exit_time))
-        formalized.loc[exit_timestamp, 'exit_point'] = exit_price
+        exit_date = trade_data['exit_date'].tz_localize(
+            config['Market Data']['time_zone'])
+        exit_timestamp = exit_date + pd.Timedelta(str(trade_data['exit_time']))
+        formalized.loc[exit_timestamp, 'exit_point'] = trade_data['exit_price']
         exit_apd = mpf.make_addplot(formalized.exit_point, type='scatter',
                                     markersize=100, marker=marker,
                                     color=exit_color, edgecolors='none',
                                     alpha=marker_alpha)
         addplot.append(exit_apd)
-        hlines.append(exit_price)
+        hlines.append(trade_data['exit_price'])
         colors.append(exit_color)
 
     marker_coordinate_alpha = 0.4
@@ -345,7 +339,8 @@ def plot_chart(config, trade):
     x_offset = 1.2
 
     if previous_close:
-        if current_open != entry_price and current_open != exit_price:
+        if (current_open != trade_data['entry_price']
+            and current_open != trade_data['exit_price']):
             delta = current_open - previous_close
             string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
             add_tooltips(config, axlist, x_offset, current_open, string,
@@ -353,31 +348,36 @@ def plot_chart(config, trade):
                          style['rc']['axes.edgecolor'])
 
     last_primary_axis = len(axlist) - 2
-    if not pd.isna(entry_price):
-        acronym = create_acronym(entry_reason)
+    if not pd.isna(trade_data['entry_price']):
+        acronym = create_acronym(trade_data['entry_reason'])
         if acronym:
-            add_tooltips(config, axlist, x_offset, entry_price, acronym,
-                         style['tg_tooltip_color'], entry_color,
+            add_tooltips(config, axlist, x_offset, trade_data['entry_price'],
+                         acronym, style['tg_tooltip_color'], entry_color,
                          last_primary_axis, formalized, entry_timestamp)
-    if not pd.isna(exit_price):
-        acronym = create_acronym(exit_reason)
+    if not pd.isna(trade_data['exit_price']):
+        acronym = create_acronym(trade_data['exit_reason'])
         if acronym:
-            string = f'{acronym}, {result:.1f}, {change:.2f}%'
+            string = f"{acronym}, {result:.1f}, {trade_data['change']:.2f}%"
         else:
-            string = f'{result:.1f}, {change:.2f}%'
+            string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
-        add_tooltips(config, axlist, x_offset, exit_price, string,
-                     style['tg_tooltip_color'], exit_color, last_primary_axis,
-                     formalized, exit_timestamp)
+        add_tooltips(config, axlist, x_offset, trade_data['exit_price'],
+                     string, style['tg_tooltip_color'], exit_color,
+                     last_primary_axis, formalized, exit_timestamp)
+
+    notes = []
+    for i in range(1, 11):
+        note_column = trade_data[f'optional_note_{i}']
+        if note_column:
+            notes.append(note_column)
 
     add_text(panel, axlist, x_offset, 0.07,
-             (f'Trade {number} for {symbol}'
-              f' using {trade_type.title()} {create_acronym(tactic)}'
+             (f"Trade {trade_data['number']} for {trade_data['symbol']}"
+              f" using {trade_data['trade_type'].title()}"
+              f" {create_acronym(trade_data['tactic'])}"
               f" at {entry_date.strftime('%Y-%m-%d')}"
-              f" {entry_time.strftime('%H:%M')}"),
-             pd.Series([note_1, note_2, note_3, note_4, note_5, note_6, note_7,
-                        note_8, note_9, note_10]).dropna(),
-             style['facecolor'])
+              f" {trade_data['entry_time'].strftime('%H:%M')}"),
+             pd.Series(notes).dropna(), style['facecolor'])
 
     fig.savefig(os.path.join(config['General']['trading_directory'],
                              base + '.png'))
