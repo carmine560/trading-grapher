@@ -119,8 +119,12 @@ def configure(config_path, can_interpolate=True, can_override=True):
     for i in range(1, 11):
         config['Trading Journal'][f'optional_note_{i}'] = ''
 
-    config['MACD'] = {}
-    config['Stochastics'] = {}
+    config['MACD'] = {
+        'is_added': 'True'}
+    config['Stochastics'] = {
+        'is_added': 'True'}
+    config['Volume'] = {
+        'is_added': 'True'}
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -291,13 +295,17 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     add_ma(config, formalized, mpf, addplot, style)
 
     panel = 0
-    panel = add_macd(config, formalized, panel, mpf, addplot, style)
-    panel = stoch_panel = add_stochastics(config, formalized, panel, mpf,
-                                          addplot, style)
+    if config['MACD'].getboolean('is_added'):
+        panel = add_macd(config, formalized, panel, mpf, addplot, style)
+    if config['Stochastics'].getboolean('is_added'):
+        panel = stoch_panel = add_stochastics(config, formalized, panel, mpf,
+                                              addplot, style)
+    if config['Volume'].getboolean('is_added'):
+        panel += 1
 
-    panel += 1
     # TODO: use fill
-    fig, axlist = mpf.plot(formalized, type='candle', volume=True,
+    fig, axlist = mpf.plot(formalized, type='candle',
+                           volume=config['Volume'].getboolean('is_added'),
                            # TODO: modify width
                            tight_layout=True, figsize=(1152 / 100, 648 / 100),
                            style=style,
@@ -310,7 +318,8 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     left, right = axlist[0].get_xlim()
     axlist[0].set_xticks(np.arange(left, right, 30))
     axlist[0].set_xticks(np.arange(left, right, 10), minor=True)
-    axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
+    if config['Stochastics'].getboolean('is_added'):
+        axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
 
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
@@ -333,16 +342,33 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
             and current_open != trade_data['exit_price']):
             delta = current_open - previous_close
             string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-            add_tooltips(config, axlist, x_offset, current_open, string,
+            add_tooltips(config, axlist, x_offset, 0.0, current_open, string,
                          style['tg_tooltip_color'],
                          style['rc']['axes.edgecolor'])
 
-    last_primary_axis = len(axlist) - 2
+    # last_primary_axis = len(axlist) - 2
+    # print(len(axlist))
+    last_primary_axis = 2 * panel # TODO: replace with axlist
+    # print(last_primary_axis)
+
+    # print(bottom, top)
+    # TODO: calculate 0.03
+    if last_primary_axis == 0:
+        y_offset_ratio = 0.006
+    elif last_primary_axis == 2:
+        y_offset_ratio = 0.02
+    elif last_primary_axis == 4:
+        y_offset_ratio = 0.025
+    elif last_primary_axis == 6:
+        y_offset_ratio = 0.03
+
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['entry_reason'])
         if acronym:
-            add_tooltips(config, axlist, x_offset, trade_data['entry_price'],
-                         acronym, style['tg_tooltip_color'], entry_color,
+            # TODO: fix last_primary_axis
+            add_tooltips(config, axlist, x_offset, y_offset_ratio,
+                         trade_data['entry_price'], acronym,
+                         style['tg_tooltip_color'], entry_color,
                          last_primary_axis, formalized, entry_timestamp)
     if not pd.isna(trade_data['exit_price']):
         acronym = create_acronym(trade_data['exit_reason'])
@@ -351,9 +377,11 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         else:
             string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
-        add_tooltips(config, axlist, x_offset, trade_data['exit_price'],
-                     string, style['tg_tooltip_color'], exit_color,
-                     last_primary_axis, formalized, exit_timestamp)
+        # TODO: fix last_primary_axis
+        add_tooltips(config, axlist, x_offset, y_offset_ratio,
+                     trade_data['exit_price'], string,
+                     style['tg_tooltip_color'], exit_color, last_primary_axis,
+                     formalized, exit_timestamp)
 
     notes = []
     for index in range(1, 11):
@@ -361,7 +389,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         if note_column:
             notes.append(note_column)
 
-    add_text(panel, axlist, x_offset, 0.07,
+    add_text(panel, axlist, x_offset, 0.07, # TODO: calculate y_offset_ratio
              (f"Trade {trade_data['number']} for {trade_data['symbol']}"
               f" using {trade_data['trade_type'].title()}"
               f" {create_acronym(trade_data['tactic'])}"
@@ -485,11 +513,16 @@ def create_acronym(phrase):
         return acronym
 
 
-def add_tooltips(config, axlist, x_offset, price, string, color, bbox_color,
-                 last_primary_axis=None, formalized=None, timestamp=None):
+def add_tooltips(config, axlist, x_offset, y_offset_ratio, price, string,
+                 color, bbox_color, last_primary_axis=None, formalized=None,
+                 timestamp=None):
     """Add tooltips to the specified axes list."""
     alpha = 0.8
     bbox_alpha = 0.6
+
+    # x_offset = 0.0
+    left, right = axlist[0].get_xlim()
+    print(left, right)
 
     axlist[0].text(
         -x_offset, price, string, alpha=alpha, c=color, size='small',
@@ -498,8 +531,12 @@ def add_tooltips(config, axlist, x_offset, price, string, color, bbox_color,
                   fc=bbox_color))
     if timestamp:
         bottom, top = axlist[last_primary_axis].get_ylim()
+
+        y = bottom
+        y = -y_offset_ratio * (top - bottom)
+        y = bottom - y_offset_ratio * (top - bottom)
         axlist[last_primary_axis].text(
-            formalized.index.get_loc(timestamp), -0.03 * (top - bottom),
+            formalized.index.get_loc(timestamp), y,
             timestamp.strftime('%H:%M'), alpha=alpha, c=color, size='small',
             ha='center', va='top',
             bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
@@ -512,6 +549,7 @@ def add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
     """Add a title and notes to the top of the specified panel."""
     # Use the last panel to prevent other panels from overwriting the
     # text.
+    # TODO: fix panel < 2
     axis_index = 2 * panel
     bottom, top = axlist[axis_index].get_ylim()
 
@@ -529,7 +567,7 @@ def add_text(panel, axlist, x_offset, y_offset_ratio, title, note_series,
     if errors:
         axlist[axis_index].text(x_offset,
                                 panel * top - y_offset_ratio * (top - bottom),
-                                errors, va='top', zorder=0,
+                                errors, va='top', zorder=1,
                                 bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
 
 
