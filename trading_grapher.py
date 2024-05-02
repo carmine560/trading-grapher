@@ -78,8 +78,10 @@ def main():
             save_market_data(config, trade_data, market_data_path, entry_date)
             plot_chart(config, trade_data, market_data_path, entry_date, style)
 
-    # TODO: add if-statement
-    check_charts(config, trading_journal[config['Trading Journal']['chart']])
+    # TODO: add -c
+    if config['Trading Journal']['chart'] in trading_journal.columns:
+        check_charts(config,
+                     trading_journal[config['Trading Journal']['chart']])
 
 
 def configure(config_path, can_interpolate=True, can_override=True):
@@ -90,7 +92,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
     else:
         config = configparser.ConfigParser(interpolation=None)
 
-    # TODO: add Indicators or MACD and Stochastics
     config['General'] = {
         # TODO: add option '2022-12-14'
         'trading_directory': os.path.join(os.path.expanduser('~'),
@@ -126,6 +127,10 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Stochastics'] = {
         'is_added': 'True'}
     config['Volume'] = {
+        'is_added': 'True'}
+    config['Tooltips'] = {
+        'is_added': 'True'}
+    config['Text'] = {
         'is_added': 'True'}
 
     if can_override:
@@ -176,7 +181,7 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
         df['volume'] = df['volume'].mask(df['volume'] > q, q)
 
         previous = df[df.index < entry_date]
-        if previous:
+        if not previous.empty:
             previous_date = pd.Timestamp.date(
                 previous.dropna().tail(1).index[0])
             previous_date = pd.Timestamp(previous_date,
@@ -184,7 +189,7 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
 
         morning = (pd.Timedelta(str(trade_data['exit_time']))
                    < pd.Timedelta(hours=12))
-        if morning and previous:
+        if morning and not previous.empty:
             start = previous_date + pd.Timedelta(hours=12, minutes=30)
             end = entry_date + pd.Timedelta(hours=11, minutes=29)
         else:
@@ -198,7 +203,7 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
         formalized = formalized.astype('float')
         formalized.update(df)
 
-        if morning and previous:
+        if morning and not previous.empty:
             start = previous_date + pd.Timedelta(hours=15)
             end = entry_date + pd.Timedelta(hours=8, minutes=59)
             exclusion = pd.date_range(start=start, end=end, freq='min')
@@ -206,13 +211,13 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
         else:
             formalized = formalized.between_time('12:30:00', '11:29:00')
 
-        if formalized.isna().values.all(): # TODO
+        if formalized.isna().values.all():
             print('Values are missing.')
-            return
+            sys.exit(1)
 
         try:
             formalized.to_csv(market_data_path)
-        except Exception as e:  # TODO
+        except Exception as e:
             print(e)
             sys.exit(1)
 
@@ -320,6 +325,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     left, right = axlist[0].get_xlim()
     axlist[0].set_xticks(np.arange(left, right, 30))
     axlist[0].set_xticks(np.arange(left, right, 10), minor=True)
+    # TODO: merge with add_stochastics()
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
 
@@ -369,7 +375,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         if note_column:
             notes.append(note_column)
 
-    add_text(panel, axlist,
+    add_text(axlist,
              (f"Trade {trade_data['number']} for {trade_data['symbol']}"
               f" using {trade_data['trade_type'].title()}"
               f" {create_acronym(trade_data['tactic'])}"
@@ -507,11 +513,11 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
 
     if timestamp:
         Y_OFFSET_RATIOS = {0: 0.006, 2: 0.02, 4: 0.025, 6: 0.03}
-        last_primary_axis = len(axlist) - 2
-        bottom, top = axlist[last_primary_axis].get_ylim()
-        y_offset_ratio = Y_OFFSET_RATIOS.get(last_primary_axis)
+        last_primary_axes = len(axlist) - 2
+        bottom, top = axlist[last_primary_axes].get_ylim()
+        y_offset_ratio = Y_OFFSET_RATIOS.get(last_primary_axes)
 
-        axlist[last_primary_axis].text(
+        axlist[last_primary_axes].text(
             formalized.index.get_loc(timestamp),
             bottom - y_offset_ratio * (top - bottom),
             timestamp.strftime('%H:%M'), alpha=alpha, c=color, size='small',
@@ -520,21 +526,20 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
                       fc=bbox_color))
 
 
-def add_text(panel, axlist, title, note_series, bbox_color):
-    # TODO: fix docstring
-    """Add a title and notes to the top of the specified panel."""
+def add_text(axlist, title, note_series, bbox_color):
+    """Add a title and notes to the last primary axes."""
     # Use the last panel to prevent other panels from overwriting the
     # text.
-    # TODO: remove panel
-    axis_index = 2 * panel
+    last_primary_axes = len(axlist) - 2
     x_offset = 1.2
-    bottom, top = axlist[axis_index].get_ylim()
+    panel = len(axlist) / 2 - 1
+    bottom, top = axlist[last_primary_axes].get_ylim()
     # TODO: fix panel < 2
     y_offset_ratio = 0.07
 
-    axlist[axis_index].text(x_offset,
-                            panel * top - y_offset_ratio * (top - bottom),
-                            title, weight='bold', va='top')
+    axlist[last_primary_axes].text(
+        x_offset, panel * top - y_offset_ratio * (top - bottom), title,
+        weight='bold', va='top')
 
     errors = ''
     for note_index, value in note_series.items():
@@ -544,10 +549,10 @@ def add_text(panel, axlist, title, note_series, bbox_color):
             errors = f'{errors}\n{note_index + 1}. {value}'
 
     if errors:
-        axlist[axis_index].text(x_offset,
-                                panel * top - y_offset_ratio * (top - bottom),
-                                errors, va='top', zorder=1,
-                                bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
+        axlist[last_primary_axes].text(
+            x_offset, panel * top - y_offset_ratio * (top - bottom), errors,
+            va='top', zorder=1,
+            bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
 
 
 def check_charts(config, charts):
