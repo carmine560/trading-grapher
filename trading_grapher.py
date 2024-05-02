@@ -311,46 +311,33 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         panel += 1
 
     # TODO: use fill
-    fig, axlist = mpf.plot(formalized, type='candle',
-                           volume=config['Volume'].getboolean('is_added'),
-                           # TODO: modify width
-                           tight_layout=True, figsize=(1152 / 100, 648 / 100),
-                           style=style,
+    # TODO: modify width
+    fig, axlist = mpf.plot(formalized, addplot=addplot, closefig=True,
+                           figsize=(1152 / 100, 648 / 100), hlines=hlines,
+                           returnfig=True,
                            scale_padding={'top': 0, 'right': 0.05,
                                           'bottom': 1.5},
                            scale_width_adjustment=dict(candle=1.5),
-                           hlines=hlines, addplot=addplot, returnfig=True,
-                           closefig=True, volume_panel=panel)
+                           style=style, tight_layout=True, type='candle',
+                           volume=config['Volume'].getboolean('is_added'),
+                           volume_panel=panel)
 
     left, right = axlist[0].get_xlim()
     axlist[0].set_xticks(np.arange(left, right, 30))
     axlist[0].set_xticks(np.arange(left, right, 10), minor=True)
-    # TODO: merge with add_stochastics()
+
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
 
-    for index, _ in enumerate(axlist):
-        if (index % 2) == 0:
-            axlist[index].grid(which='minor', alpha=0.2)
-            if entry_timestamp:
-                axlist[index].axvline(
-                    x=formalized.index.get_loc(entry_timestamp),
-                    color=entry_color, linestyle='dotted', linewidth=1,
-                    alpha=marker_coordinate_alpha)
-            if exit_timestamp:
-                axlist[index].axvline(
-                    x=formalized.index.get_loc(exit_timestamp),
-                    color=exit_color, linestyle='dotted', linewidth=1,
-                    alpha=marker_coordinate_alpha)
+    add_entry_exit_lines(axlist, formalized, entry_timestamp, entry_color,
+                         exit_timestamp, exit_color, marker_coordinate_alpha)
 
-    if previous_close:
-        if (current_open != trade_data['entry_price']
-            and current_open != trade_data['exit_price']):
-            delta = current_open - previous_close
-            string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-            add_tooltips(config, axlist, current_open, string,
-                         style['tg_tooltip_color'],
-                         style['rc']['axes.edgecolor'])
+    if (previous_close and current_open != trade_data['entry_price']
+        and current_open != trade_data['exit_price']):
+        delta = current_open - previous_close
+        string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
+        add_tooltips(config, axlist, current_open, string,
+                     style['tg_tooltip_color'], style['rc']['axes.edgecolor'])
 
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['entry_reason'])
@@ -486,6 +473,24 @@ def stochastics(high, low, close, k, d, smooth_k):
     stochastics_d = stochastics_k.rolling(d).mean()
 
     return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
+
+
+def add_entry_exit_lines(axlist, formalized, entry_timestamp, entry_color,
+                         exit_timestamp, exit_color, marker_coordinate_alpha):
+    """Add vertical lines between panels at entry and exit points."""
+    for index, _ in enumerate(axlist):
+        if (index % 2) == 0:
+            axlist[index].grid(which='minor', alpha=0.2)
+            if entry_timestamp:
+                axlist[index].axvline(
+                    x=formalized.index.get_loc(entry_timestamp),
+                    color=entry_color, linestyle='dotted', linewidth=1,
+                    alpha=marker_coordinate_alpha)
+            if exit_timestamp:
+                axlist[index].axvline(
+                    x=formalized.index.get_loc(exit_timestamp),
+                    color=exit_color, linestyle='dotted', linewidth=1,
+                    alpha=marker_coordinate_alpha)
 
 
 def create_acronym(phrase):
