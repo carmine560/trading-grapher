@@ -250,8 +250,10 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     elif trade_data['trade_type'].lower() == 'short':
         marker = 'D'
 
+    # TODO: move to style
     marker_alpha = 0.2
 
+    # TODO: create add_marker()
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
@@ -293,6 +295,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         hlines.append(trade_data['exit_price'])
         colors.append(exit_color)
 
+    # TODO: move to style
     marker_coordinate_alpha = 0.4
 
     if hlines and colors:
@@ -506,25 +509,26 @@ def create_acronym(phrase):
 def add_tooltips(config, axlist, price, string, color, bbox_color,
                  formalized=None, timestamp=None):
     """Add tooltips to the specified axes list."""
-    x_offset = 1.2
+    # Calculate x_offset and y_offset_ratios using points_to_pixels()
+    # and transform(). The values are currently obtained heuristically.
+    x_offset = -1.2
     alpha = 0.8
     bbox_alpha = 0.6
 
-    axlist[0].text(
-        -x_offset, price, string, alpha=alpha, c=color, size='small',
-        ha='right', va='center',
-        bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
-                  fc=bbox_color))
+    axlist[0].text(x_offset, price, string, alpha=alpha, c=color, size='small',
+                   ha='right', va='center',
+                   bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha,
+                             ec='none', fc=bbox_color))
 
     if timestamp:
-        Y_OFFSET_RATIOS = {0: 0.006, 2: 0.02, 4: 0.025, 6: 0.03}
         last_primary_axes = len(axlist) - 2
         bottom, top = axlist[last_primary_axes].get_ylim()
-        y_offset_ratio = Y_OFFSET_RATIOS.get(last_primary_axes)
+        y_offset_ratios = {0: -0.006, 2: -0.02, 4: -0.025, 6: -0.03}
+        y_offset_ratio = y_offset_ratios.get(last_primary_axes)
 
         axlist[last_primary_axes].text(
             formalized.index.get_loc(timestamp),
-            bottom - y_offset_ratio * (top - bottom),
+            bottom + y_offset_ratio * (top - bottom),
             timestamp.strftime('%H:%M'), alpha=alpha, c=color, size='small',
             ha='center', va='top',
             bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
@@ -536,27 +540,34 @@ def add_text(axlist, title, note_series, bbox_color):
     # Use the last panel to prevent other panels from overwriting the
     # text.
     last_primary_axes = len(axlist) - 2
-    x_offset = 1.2
-    panel = len(axlist) / 2 - 1
     bottom, top = axlist[last_primary_axes].get_ylim()
-    # TODO: fix panel < 2
-    y_offset_ratio = 0.07
+    height = top - bottom
 
-    axlist[last_primary_axes].text(
-        x_offset, panel * top - y_offset_ratio * (top - bottom), title,
-        weight='bold', va='top')
+    # Calculate x_offset and y_offset_ratios using points_to_pixels()
+    # and transform(). The values are currently obtained heuristically.
+    # Additionally, change panel_offset_factor if panel_ratios is
+    # specified.
+    x_offset = 1.2
+    panel_offset_factors = {0: 0, 2: 2.5 * height,
+                            4: (last_primary_axes / 2 - 1) * height,
+                            6: (last_primary_axes / 2 - 1) * height}
+    panel_offset_factor = panel_offset_factors.get(last_primary_axes)
+    y_offset_ratios = {0: -0.012, 2: -0.04, 4: -0.06, 6: -0.07}
+    y_offset_ratio = y_offset_ratios.get(last_primary_axes)
+    y = top + panel_offset_factor + y_offset_ratio * height
 
-    errors = ''
+    axlist[last_primary_axes].text(x_offset, y, title, weight='bold', va='top')
+
+    notes = ''
     for note_index, value in note_series.items():
         if note_index == 0:
-            errors = f'\n{note_index + 1}. {value}'
+            notes = f'\n{note_index + 1}. {value}'
         else:
-            errors = f'{errors}\n{note_index + 1}. {value}'
+            notes = f'{notes}\n{note_index + 1}. {value}'
 
-    if errors:
+    if notes:
         axlist[last_primary_axes].text(
-            x_offset, panel * top - y_offset_ratio * (top - bottom), errors,
-            va='top', zorder=1,
+            x_offset, y, notes, va='top', zorder=1,
             bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
 
 

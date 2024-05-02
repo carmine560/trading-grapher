@@ -480,7 +480,7 @@ def create_icon(base, icon_directory=None):
 
         This function calculates the font size that will allow the text
         to fit within the desired dimensions. It uses a temporary font
-        size to calculate the scaling factor, then returns a font object
+        size to calculate the scale factor, then returns a font object
         with the scaled size.
 
         Args:
@@ -501,10 +501,10 @@ def create_icon(base, icon_directory=None):
         left, top, right, bottom = ImageDraw.Draw(
             Image.new('RGB', (1, 1))).multiline_textbbox((0, 0), text,
                                                          font=temp_font)
-        scaling_factor = min(desired_dimension / (right - left),
-                             desired_dimension / (bottom - top))
+        scale_factor = min(desired_dimension / (right - left),
+                           desired_dimension / (bottom - top))
         actual_font = ImageFont.truetype(font_path,
-                                         int(temp_font_size * scaling_factor))
+                                         int(temp_font_size * scale_factor))
         if variation_name:
             actual_font.set_variation_by_name(variation_name)
         return actual_font
