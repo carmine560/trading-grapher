@@ -332,24 +332,7 @@ Register-ArgumentCompleter -Native -CommandName {interpreters_array} `
 def create_icon(base, icon_directory=None):
     """Generate an icon from the acronym of a base name."""
     def get_scaled_font(text, font_path, desired_dimension, variation_name=''):
-        """
-        Calculate the scaled font size for the icon text.
-
-        This function calculates the font size that will allow the text
-        to fit within the desired dimensions. It uses a temporary font
-        size to calculate the scale factor, then returns a font object
-        with the scaled size.
-
-        Args:
-            text (str): The text to be displayed on the icon.
-            font_path (str): The path to the font file.
-            desired_dimension (int): The desired dimension for the text.
-            variation_name (str, optional): The name of the font
-                variation to use. Defaults to an empty string.
-
-        Returns:
-            FreeTypeFont: A font object with the scaled font size.
-        """
+        """Calculate the scaled font size for the icon text."""
         temp_font_size = 100
         temp_font = ImageFont.truetype(font_path, temp_font_size)
         if variation_name:
