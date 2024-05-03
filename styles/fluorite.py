@@ -17,6 +17,7 @@ style = {'base_mpl_style': 'default',
                           'alpha': None},
          'mavcolors': ['darksalmon',
                        'cornflowerblue',
+                       'mediumpurple',
                        'rebeccapurple'],
          'facecolor': '#242424',
          'figcolor': '#242424',
@@ -32,7 +33,7 @@ style = {'base_mpl_style': 'default',
                 'ytick.color': '#999999'},
          # The mplfinance._styledata module does not use the following
          # custom keys.
-         'tg_tooltip_color': 'black',
-         'tg_neutral_color': 'lightgray',
-         'tg_profit_color': 'mediumspringgreen',
-         'tg_loss_color': 'hotpink'}
+         'tg': {'tooltip_color': 'black',
+                'neutral_color': 'lightgray',
+                'profit_color': 'mediumspringgreen',
+                'loss_color': 'hotpink'}}

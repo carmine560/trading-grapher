@@ -94,8 +94,9 @@ def main():
     if (has_plotted
         and config['Trading Journal']['optional_chart_file']
         in trading_journal.columns):
-        check_charts(
-            config,
+        file_utilities.compare_directory_list(
+            config['General']['trading_directory'],
+            r'\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png',
             trading_journal[config['Trading Journal']['optional_chart_file']])
 
 
@@ -247,7 +248,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         sys.exit(1)
 
     entry_timestamp = exit_timestamp = None
-    entry_color = style['tg_neutral_color']
+    entry_color = style['tg']['neutral_color']
     addplot = hlines = colors = []
 
     previous = formalized[formalized.index < entry_date]
@@ -294,9 +295,9 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         elif trade_data['trade_type'].lower() == 'short':
             result = trade_data['entry_price'] - trade_data['exit_price']
         if result > 0:
-            exit_color = style['tg_profit_color']
+            exit_color = style['tg']['profit_color']
         elif result < 0:
-            exit_color = style['tg_loss_color']
+            exit_color = style['tg']['loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
         exit_date = trade_data['exit_date'].tz_localize(
@@ -334,7 +335,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         formalized, addplot=addplot, closefig=True,
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
         figsize=(1152 / 100, 648 / 100), hlines=hlines, returnfig=True,
-        scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.5},
+        scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
@@ -354,13 +355,13 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         delta = current_open - previous_close
         string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
         add_tooltips(config, axlist, current_open, string,
-                     style['tg_tooltip_color'], style['rc']['axes.edgecolor'])
+                     style['tg']['tooltip_color'], style['rc']['axes.edgecolor'])
 
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['optional_entry_reason'])
         if acronym:
             add_tooltips(config, axlist, trade_data['entry_price'], acronym,
-                         style['tg_tooltip_color'], entry_color,
+                         style['tg']['tooltip_color'], entry_color,
                          formalized=formalized, timestamp=entry_timestamp)
     if not pd.isna(trade_data['exit_price']):
         acronym = create_acronym(trade_data['optional_exit_reason'])
@@ -370,7 +371,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
             string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
         add_tooltips(config, axlist, trade_data['exit_price'], string,
-                     style['tg_tooltip_color'], exit_color,
+                     style['tg']['tooltip_color'], exit_color,
                      formalized=formalized, timestamp=exit_timestamp)
 
     notes = []
@@ -396,7 +397,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
 
 
 def add_ema(config, formalized, mpf, addplot, style):
-    """Add Exponential Moving Average (EMA) plots to the existing plots."""
+    """Add exponential moving average plots to the existing plots."""
     ma_1 = ema(formalized.close, 5)
     ma_2 = ema(formalized.close, 25)
     ma_3 = ema(formalized.close, 75)
@@ -409,7 +410,7 @@ def add_ema(config, formalized, mpf, addplot, style):
 
 
 def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
-    """Add Moving Average Convergence Divergence (MACD) plots to the panel."""
+    """Add moving average convergence divergence plots to the given panel."""
     if ma == 'ema':
         macd = ema(formalized.close, 12) - ema(formalized.close, 26)
         ylabel = 'MACD'
@@ -426,21 +427,24 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
         mpf.make_addplot(signal, panel=panel, color=style['mavcolors'][1],
                          width=0.8, secondary_y=False),
         mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
-                         color=style['mavcolors'][2], secondary_y=False)]
+                         color=[style['mavcolors'][2] if value >= 0
+                                else style['mavcolors'][3]
+                                for value in histogram],
+                         secondary_y=False)]
     addplot.extend(macd_apd)
 
     return panel
 
 
 def ema(series, span):
-    """Calculate the Exponential Moving Average (EMA) of a series."""
+    """Calculate the exponential moving average of a series."""
     ema = series.ewm(span=span).mean()
     ema.iloc[:span - 1] = np.nan
     return ema
 
 
 def tema(series, span):
-    """Calculate the Triple Exponential Moving Average (TEMA) of a series."""
+    """Calculate the triple exponential moving average of a series."""
     ema_1 = ema(series, span)
     ema_2 = ema(ema_1, span)
     ema_3 = ema(ema_2, span)
@@ -585,18 +589,6 @@ def add_text(axlist, title, note_series, bbox_color):
         axlist[last_primary_axes].text(
             x_offset, y, notes, va='top', zorder=1,
             bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
-
-
-def check_charts(config, charts):
-    """Validate charts in the trading directory and print invalid ones."""
-    for f in os.listdir(config['General']['trading_directory']):
-        if f.endswith('.png') and f not in charts.values:
-            print(os.path.join(config['General']['trading_directory'], f))
-
-    for value in charts:
-        if isinstance(value, str) and not os.path.exists(
-                os.path.join(config['General']['trading_directory'], value)):
-            print(value)
 
 
 if __name__ == '__main__':
