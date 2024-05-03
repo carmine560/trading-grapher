@@ -18,6 +18,9 @@ import pandas as pd
 import configuration
 import file_utilities
 
+DATE_FORMAT = '%b %-d'
+TIME_FORMAT = '%-H:%M'
+
 
 def main():
     """Parse trade dates, save market data, plot charts, and check charts."""
@@ -45,10 +48,11 @@ def main():
     trading_journal = pd.read_excel(
         config['General']['trading_path'],
         sheet_name=config['General']['trading_sheet'])
-    trading_journal_columns = ['number', 'symbol', 'trade_type', 'tactic',
-                               'entry_date', 'entry_time', 'entry_price',
-                               'entry_reason', 'exit_date', 'exit_time',
-                               'exit_price', 'exit_reason', 'change']
+    trading_journal_columns = ['optional_number', 'symbol', 'trade_type',
+                               'optional_tactic', 'entry_date', 'entry_time',
+                               'entry_price', 'optional_entry_reason',
+                               'exit_date', 'exit_time', 'exit_price',
+                               'optional_exit_reason', 'change']
     for i in range(1, 11):
         trading_journal_columns.append(f'optional_note_{i}')
 
@@ -59,29 +63,40 @@ def main():
         print(e)
         sys.exit(1)
 
+    has_plotted = False
     for date in pd.to_datetime(args.dates):
         trades = trading_journal.loc[
             trading_journal[config['Trading Journal']['entry_date']] == date]
-        for _, trade in trades.iterrows():
-            trade_data = {}
-            for column in trading_journal_columns:
-                trade_data[column] = trade.get(
-                    config['Trading Journal'][column])
+        if not trades.empty:
+            first_index = next(trades.iterrows())[0]
+            for index, trade in trades.iterrows():
+                trade_data = {}
+                for column in trading_journal_columns:
+                    trade_data[column] = trade.get(
+                        config['Trading Journal'][column])
 
-            market_data_path = os.path.join(
-                config['General']['trading_directory'],
-                (f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
-                 f"-{trade_data['symbol']}.csv"))
-            entry_date = trade_data['entry_date'].tz_localize(
-                config['Market Data']['time_zone'])
+                if not trade_data['optional_number']:
+                    trade_data['optional_number'] = index - first_index + 1
 
-            save_market_data(config, trade_data, market_data_path, entry_date)
-            plot_chart(config, trade_data, market_data_path, entry_date, style)
+                market_data_path = os.path.join(
+                    config['General']['trading_directory'],
+                    (f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
+                     f"-{trade_data['symbol']}.csv"))
+                entry_date = trade_data['entry_date'].tz_localize(
+                    config['Market Data']['time_zone'])
 
-    # TODO: add -c
-    if config['Trading Journal']['chart'] in trading_journal.columns:
-        check_charts(config,
-                     trading_journal[config['Trading Journal']['chart']])
+                save_market_data(config, trade_data, market_data_path,
+                                 entry_date)
+                plot_chart(config, trade_data, market_data_path, entry_date,
+                           style)
+                has_plotted = True
+
+    if (has_plotted
+        and config['Trading Journal']['optional_chart_file']
+        in trading_journal.columns):
+        check_charts(
+            config,
+            trading_journal[config['Trading Journal']['optional_chart_file']])
 
 
 def configure(config_path, can_interpolate=True, can_override=True):
@@ -103,20 +118,20 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'time_zone': 'Asia/Tokyo'}
 
     config['Trading Journal'] = {
-        'number': 'Number',     # TODO: add optional_ prefix
+        'optional_number': 'Number',
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
-        'tactic': 'Tactic',     # TODO: add optional_ prefix
+        'optional_tactic': 'Tactic',
         'entry_date': 'Entry date',
         'entry_time': 'Entry time',
         'entry_price': 'Entry price',
-        'entry_reason': 'Entry reason', # TODO: add optional_ prefix
+        'optional_entry_reason': 'Entry reason',
         'exit_date': 'Exit date',
         'exit_time': 'Exit time',
         'exit_price': 'Exit price',
-        'exit_reason': 'Exit reason', # TODO: add optional_ prefix
-        'change': 'Change',
-        'chart': 'Chart'}       # TODO: add optional_ prefix
+        'optional_exit_reason': 'Exit reason',
+        'change': 'Change',   # TODO: calculate change and add optional_ prefix
+        'optional_chart_file': 'optional_chart_file'}
     for i in range(1, 11):
         config['Trading Journal'][f'optional_note_{i}'] = ''
 
@@ -135,7 +150,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
 
     if can_override:
         configuration.read_config(config, config_path)
-        configuration.write_config(config, config_path)  # TODO
+        # configuration.write_config(config, config_path)  # TODO
 
     return config
 
@@ -254,6 +269,7 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     marker_alpha = 0.2
 
     # TODO: create add_marker()
+    # nan is not recognized as False in a boolean context.
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
@@ -314,16 +330,14 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         panel += 1
 
     # TODO: use fill
-    # TODO: modify width
-    fig, axlist = mpf.plot(formalized, addplot=addplot, closefig=True,
-                           figsize=(1152 / 100, 648 / 100), hlines=hlines,
-                           returnfig=True,
-                           scale_padding={'top': 0, 'right': 0.05,
-                                          'bottom': 1.5},
-                           scale_width_adjustment=dict(candle=1.5),
-                           style=style, tight_layout=True, type='candle',
-                           volume=config['Volume'].getboolean('is_added'),
-                           volume_panel=panel)
+    fig, axlist = mpf.plot(
+        formalized, addplot=addplot, closefig=True,
+        datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
+        figsize=(1152 / 100, 648 / 100), hlines=hlines, returnfig=True,
+        scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.5},
+        scale_width_adjustment=dict(candle=1.5), style=style,
+        tight_layout=True, type='candle',
+        volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
 
     left, right = axlist[0].get_xlim()
     axlist[0].set_xticks(np.arange(left, right, 30))
@@ -343,21 +357,21 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
                      style['tg_tooltip_color'], style['rc']['axes.edgecolor'])
 
     if not pd.isna(trade_data['entry_price']):
-        acronym = create_acronym(trade_data['entry_reason'])
+        acronym = create_acronym(trade_data['optional_entry_reason'])
         if acronym:
             add_tooltips(config, axlist, trade_data['entry_price'], acronym,
-                         style['tg_tooltip_color'], entry_color, formalized,
-                         entry_timestamp)
+                         style['tg_tooltip_color'], entry_color,
+                         formalized=formalized, timestamp=entry_timestamp)
     if not pd.isna(trade_data['exit_price']):
-        acronym = create_acronym(trade_data['exit_reason'])
+        acronym = create_acronym(trade_data['optional_exit_reason'])
         if acronym:
             string = f"{acronym}, {result:.1f}, {trade_data['change']:.2f}%"
         else:
             string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
         add_tooltips(config, axlist, trade_data['exit_price'], string,
-                     style['tg_tooltip_color'], exit_color, formalized,
-                     exit_timestamp)
+                     style['tg_tooltip_color'], exit_color,
+                     formalized=formalized, timestamp=exit_timestamp)
 
     notes = []
     for index in range(1, 11):
@@ -365,17 +379,19 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         if note_column:
             notes.append(note_column)
 
+    tactic = create_acronym(trade_data['optional_tactic'])
     add_text(axlist,
-             (f"Trade {trade_data['number']} for {trade_data['symbol']}"
+             (f"Trade {trade_data['optional_number']}"
+              f" for {trade_data['symbol']}"
               f" using {trade_data['trade_type'].title()}"
-              f" {create_acronym(trade_data['tactic'])}"
-              f" at {entry_date.strftime('%Y-%m-%d')}"
-              f" {trade_data['entry_time'].strftime('%H:%M')}"),
+              f"{f' {tactic}' if tactic else ''}"
+              f" on {entry_date.strftime(f'%a, {DATE_FORMAT}, {chr(39)}%y,')}"
+              f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}"),
              pd.Series(notes).dropna(), style['facecolor'])
 
     fig.savefig(os.path.join(config['General']['trading_directory'],
                              (f"{entry_date.strftime('%Y-%m-%d')}"
-                              f"-{int(trade_data['number']):02}"
+                              f"-{int(trade_data['optional_number']):02}"
                               f"-{trade_data['symbol']}.png")))
 
 
@@ -498,12 +514,11 @@ def add_entry_exit_lines(axlist, formalized, entry_timestamp, entry_color,
 
 def create_acronym(phrase):
     """Generate an acronym from the given phrase."""
+    acronym = ''
     if isinstance(phrase, str):
-        acronym = ''
         for word in re.split(r'[\W_]+', phrase):
             acronym = acronym + word[0].upper()
-
-        return acronym
+    return acronym
 
 
 def add_tooltips(config, axlist, price, string, color, bbox_color,
@@ -529,8 +544,8 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
         axlist[last_primary_axes].text(
             formalized.index.get_loc(timestamp),
             bottom + y_offset_ratio * (top - bottom),
-            timestamp.strftime('%H:%M'), alpha=alpha, c=color, size='small',
-            ha='center', va='top',
+            timestamp.strftime(TIME_FORMAT), alpha=alpha, c=color,
+            size='small', ha='center', va='top',
             bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
                       fc=bbox_color))
 
@@ -545,12 +560,13 @@ def add_text(axlist, title, note_series, bbox_color):
 
     # Calculate x_offset and y_offset_ratios using points_to_pixels()
     # and transform(). The values are currently obtained heuristically.
-    # Additionally, change panel_offset_factor if panel_ratios is
+    # Additionally, modify panel_offset_factors if panel_ratios is
     # specified.
     x_offset = 1.2
+    default_panel_offset_factor = (last_primary_axes / 2 - 1) * height
     panel_offset_factors = {0: 0, 2: 2.5 * height,
-                            4: (last_primary_axes / 2 - 1) * height,
-                            6: (last_primary_axes / 2 - 1) * height}
+                            4: default_panel_offset_factor,
+                            6: default_panel_offset_factor}
     panel_offset_factor = panel_offset_factors.get(last_primary_axes)
     y_offset_ratios = {0: -0.012, 2: -0.04, 4: -0.06, 6: -0.07}
     y_offset_ratio = y_offset_ratios.get(last_primary_axes)
