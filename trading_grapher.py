@@ -330,11 +330,14 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     if config['Volume'].getboolean('is_added'):
         panel += 1
 
-    # TODO: use fill
     fig, axlist = mpf.plot(
         formalized, addplot=addplot, closefig=True,
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
-        figsize=(1152 / 100, 648 / 100), hlines=hlines, returnfig=True,
+        figsize=(1152 / 100, 648 / 100),
+        fill_between=dict(y1=trade_data['entry_price'],
+                          y2=trade_data['exit_price'],
+                          alpha=0.04, color=exit_color, zorder=0),
+        hlines=hlines, returnfig=True,
         scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
