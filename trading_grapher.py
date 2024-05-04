@@ -78,17 +78,19 @@ def main():
                 if not trade_data['optional_number']:
                     trade_data['optional_number'] = index - first_index + 1
 
+                trade_data['entry_date'] = (
+                    trade_data['entry_date'].tz_localize(
+                        config['Market Data']['time_zone']))
+                trade_data['exit_date'] = (
+                    trade_data['exit_date'].tz_localize(
+                        config['Market Data']['time_zone']))
                 market_data_path = os.path.join(
                     config['General']['trading_directory'],
                     (f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
                      f"-{trade_data['symbol']}.csv"))
-                entry_date = trade_data['entry_date'].tz_localize(
-                    config['Market Data']['time_zone'])
 
-                save_market_data(config, trade_data, market_data_path,
-                                 entry_date)
-                plot_chart(config, trade_data, market_data_path, entry_date,
-                           style)
+                save_market_data(config, trade_data, market_data_path)
+                plot_chart(config, trade_data, market_data_path, style)
                 has_plotted = True
 
     if (has_plotted
@@ -156,12 +158,12 @@ def configure(config_path, can_interpolate=True, can_override=True):
     return config
 
 
-def save_market_data(config, trade_data, market_data_path, entry_date):
+def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
     PERIOD_IN_DAYS = 7
     delta = (
         pd.Timestamp.now(tz=config['Market Data']['time_zone']).normalize()
-        - entry_date)
+        - trade_data['entry_date'])
     last = modified_time = pd.Timestamp(0,
                                         tz=config['Market Data']['time_zone'])
     if os.path.exists(market_data_path):
@@ -190,13 +192,15 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
         df = pd.DataFrame(symbol_data)
         df.timestamp = pd.to_datetime(df.timestamp, unit='ms')
         df.set_index('timestamp', inplace=True)
+        # Yahoo Finance's historical data is in UTC, but lacks explicit
+        # time zone information.
         df.index = df.index.tz_localize('UTC').tz_convert(
             config['Market Data']['time_zone'])
         # TODO: configure q
         q = df.volume.quantile(0.99)
         df['volume'] = df['volume'].mask(df['volume'] > q, q)
 
-        previous = df[df.index < entry_date]
+        previous = df[df.index < trade_data['entry_date']]
         if not previous.empty:
             previous_date = pd.Timestamp.date(
                 previous.dropna().tail(1).index[0])
@@ -207,10 +211,10 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
                    < pd.Timedelta(hours=12))
         if morning and not previous.empty:
             start = previous_date + pd.Timedelta(hours=12, minutes=30)
-            end = entry_date + pd.Timedelta(hours=11, minutes=29)
+            end = trade_data['entry_date'] + pd.Timedelta(hours=11, minutes=29)
         else:
-            start = entry_date + pd.Timedelta(hours=9)
-            end = entry_date + pd.Timedelta(hours=14, minutes=59)
+            start = trade_data['entry_date'] + pd.Timedelta(hours=9)
+            end = trade_data['entry_date'] + pd.Timedelta(hours=14, minutes=59)
 
         formalized = pd.DataFrame(columns=('open', 'high', 'low', 'close',
                                            'volume'),
@@ -221,7 +225,7 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
 
         if morning and not previous.empty:
             start = previous_date + pd.Timedelta(hours=15)
-            end = entry_date + pd.Timedelta(hours=8, minutes=59)
+            end = trade_data['entry_date'] + pd.Timedelta(hours=8, minutes=59)
             exclusion = pd.date_range(start=start, end=end, freq='min')
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
         else:
@@ -238,7 +242,7 @@ def save_market_data(config, trade_data, market_data_path, entry_date):
             sys.exit(1)
 
 
-def plot_chart(config, trade_data, market_data_path, entry_date, style):
+def plot_chart(config, trade_data, market_data_path, style):
     """Plot a trading chart with entry and exit points, and indicators."""
     try:
         formalized = pd.read_csv(market_data_path, index_col=0,
@@ -248,18 +252,23 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         sys.exit(1)
 
     entry_timestamp = exit_timestamp = None
-    entry_color = style['tg']['neutral_color']
-    addplot = hlines = colors = []
+    addplot = []
+    close_open_entry_exit_hlines = [None, None, None, None]
+    # TODO: rename tg
+    close_open_entry_exit_colors = [None, None, style['tg']['neutral_color'],
+                                    style['tg']['neutral_color']]
 
-    previous = formalized[formalized.index < entry_date]
-    current = formalized[entry_date <= formalized.index]
+    previous = formalized[formalized.index < trade_data['entry_date']]
+    current = formalized[trade_data['entry_date'] <= formalized.index]
     previous_close = current_open = 0.0
 
     if previous.notnull().values.any():
         previous_close = previous.dropna().tail(1).close.iloc[0]
+        close_open_entry_exit_hlines[0] = previous_close
+        close_open_entry_exit_colors[0] = style['rc']['axes.edgecolor']
         current_open = current.dropna().head(1).open.iloc[0]
-        hlines = [previous_close, current_open]
-        colors = [style['rc']['axes.edgecolor'], style['rc']['axes.edgecolor']]
+        close_open_entry_exit_hlines[1] = current_open
+        close_open_entry_exit_colors[1] = style['rc']['axes.edgecolor']
 
     if trade_data['trade_type'].lower() == 'long':
         marker = 'o'
@@ -274,20 +283,20 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
-        entry_timestamp = (entry_date
+        entry_timestamp = (trade_data['entry_date']
                            + pd.Timedelta(str(trade_data['entry_time'])))
         formalized.loc[entry_timestamp, 'entry_point'] = (
             trade_data['entry_price'])
+        # TODO: rename to addplot
         entry_apd = mpf.make_addplot(formalized.entry_point, type='scatter',
                                      markersize=100, marker=marker,
-                                     color=entry_color, edgecolors='none',
-                                     alpha=marker_alpha)
+                                     color=close_open_entry_exit_colors[2],
+                                     edgecolors='none', alpha=marker_alpha)
         addplot.append(entry_apd)
-        hlines.append(trade_data['entry_price'])
-        colors.append(entry_color)
+        close_open_entry_exit_hlines[2] = trade_data['entry_price']
+        close_open_entry_exit_colors[2] = close_open_entry_exit_colors[2]
 
     result = 0.0
-    exit_color = entry_color
     if (not pd.isna(trade_data['exit_time'])
         and not pd.isna(trade_data['exit_price'])):
         if trade_data['trade_type'].lower() == 'long':
@@ -295,33 +304,27 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         elif trade_data['trade_type'].lower() == 'short':
             result = trade_data['entry_price'] - trade_data['exit_price']
         if result > 0:
-            exit_color = style['tg']['profit_color']
+            close_open_entry_exit_colors[3] = style['tg']['profit_color']
         elif result < 0:
-            exit_color = style['tg']['loss_color']
+            close_open_entry_exit_colors[3] = style['tg']['loss_color']
 
         formalized['exit_point'] = pd.Series(dtype='float')
-        exit_date = trade_data['exit_date'].tz_localize(
-            config['Market Data']['time_zone'])
-        exit_timestamp = exit_date + pd.Timedelta(str(trade_data['exit_time']))
+        exit_timestamp = (trade_data['exit_date']
+                          + pd.Timedelta(str(trade_data['exit_time'])))
         formalized.loc[exit_timestamp, 'exit_point'] = trade_data['exit_price']
         exit_apd = mpf.make_addplot(formalized.exit_point, type='scatter',
                                     markersize=100, marker=marker,
-                                    color=exit_color, edgecolors='none',
-                                    alpha=marker_alpha)
+                                    color=close_open_entry_exit_colors[3],
+                                    edgecolors='none', alpha=marker_alpha)
         addplot.append(exit_apd)
-        hlines.append(trade_data['exit_price'])
-        colors.append(exit_color)
+        close_open_entry_exit_hlines[3] = trade_data['exit_price']
 
     # TODO: move to style
     marker_coordinate_alpha = 0.4
 
-    if hlines and colors:
-        hlines = dict(hlines=hlines, colors=colors, linestyle='dotted',
-                      linewidths=1, alpha=marker_coordinate_alpha)
-
     panel = 0
     if config['EMA'].getboolean('is_added'):
-        add_ema(config, formalized, mpf, addplot, style)
+        add_emas(config, formalized, mpf, addplot, style)
     if config['MACD'].getboolean('is_added'):
         panel = add_macd(config, formalized, panel, mpf, addplot, style)
     if config['Stochastics'].getboolean('is_added'):
@@ -335,9 +338,12 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
         figsize=(1152 / 100, 648 / 100),
         fill_between=dict(y1=trade_data['entry_price'],
-                          y2=trade_data['exit_price'],
-                          alpha=0.04, color=exit_color, zorder=0),
-        hlines=hlines, returnfig=True,
+                          y2=trade_data['exit_price'], alpha=0.04,
+                          color=close_open_entry_exit_colors[3], zorder=0),
+        hlines=dict(hlines=close_open_entry_exit_hlines,
+                    colors=close_open_entry_exit_colors, linestyle='dotted',
+                    linewidths=1, alpha=marker_coordinate_alpha),
+        returnfig=True,
         scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
@@ -350,21 +356,25 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
 
-    add_entry_exit_lines(axlist, formalized, entry_timestamp, entry_color,
-                         exit_timestamp, exit_color, marker_coordinate_alpha)
+    add_entry_exit_vlines(axlist, formalized, entry_timestamp,
+                          close_open_entry_exit_colors[2], exit_timestamp,
+                          close_open_entry_exit_colors[3],
+                          marker_coordinate_alpha)
 
     if (previous_close and current_open != trade_data['entry_price']
         and current_open != trade_data['exit_price']):
         delta = current_open - previous_close
         string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
         add_tooltips(config, axlist, current_open, string,
-                     style['tg']['tooltip_color'], style['rc']['axes.edgecolor'])
+                     style['tg']['tooltip_color'],
+                     close_open_entry_exit_colors[1])
 
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['optional_entry_reason'])
         if acronym:
             add_tooltips(config, axlist, trade_data['entry_price'], acronym,
-                         style['tg']['tooltip_color'], entry_color,
+                         style['tg']['tooltip_color'],
+                         close_open_entry_exit_colors[2],
                          formalized=formalized, timestamp=entry_timestamp)
     if not pd.isna(trade_data['exit_price']):
         acronym = create_acronym(trade_data['optional_exit_reason'])
@@ -374,8 +384,9 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
             string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
         add_tooltips(config, axlist, trade_data['exit_price'], string,
-                     style['tg']['tooltip_color'], exit_color,
-                     formalized=formalized, timestamp=exit_timestamp)
+                     style['tg']['tooltip_color'],
+                     close_open_entry_exit_colors[3], formalized=formalized,
+                     timestamp=exit_timestamp)
 
     notes = []
     for index in range(1, 11):
@@ -384,22 +395,38 @@ def plot_chart(config, trade_data, market_data_path, entry_date, style):
             notes.append(note_column)
 
     tactic = create_acronym(trade_data['optional_tactic'])
+    full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
     add_text(axlist,
              (f"Trade {trade_data['optional_number']}"
               f" for {trade_data['symbol']}"
               f" using {trade_data['trade_type'].title()}"
               f"{f' {tactic}' if tactic else ''}"
-              f" on {entry_date.strftime(f'%a, {DATE_FORMAT}, {chr(39)}%y,')}"
+              f" on {trade_data['entry_date'].strftime(full_date_format)}"
               f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}"),
              pd.Series(notes).dropna(), style['facecolor'])
 
-    fig.savefig(os.path.join(config['General']['trading_directory'],
-                             (f"{entry_date.strftime('%Y-%m-%d')}"
-                              f"-{int(trade_data['optional_number']):02}"
-                              f"-{trade_data['symbol']}.png")))
+    fig.savefig(os.path.join(
+        config['General']['trading_directory'],
+        (f"{trade_data['entry_date'].strftime('%Y-%m-%d')}"
+         f"-{int(trade_data['optional_number']):02}"
+         f"-{trade_data['symbol']}.png")))
 
 
-def add_ema(config, formalized, mpf, addplot, style):
+def append_marker_parameters(time_zone,
+                             trade_data,
+                             formalized,
+                             marker,
+                             entry_color,
+                             marker_alpha,
+                             style,
+                             addplot,
+                             hlines,
+                             colors,
+                             ):
+    """Add markers."""
+
+
+def add_emas(config, formalized, mpf, addplot, style):
     """Add exponential moving average plots to the existing plots."""
     ma_1 = ema(formalized.close, 5)
     ma_2 = ema(formalized.close, 25)
@@ -501,8 +528,9 @@ def stochastics(high, low, close, k, d, smooth_k):
     return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
 
 
-def add_entry_exit_lines(axlist, formalized, entry_timestamp, entry_color,
-                         exit_timestamp, exit_color, marker_coordinate_alpha):
+# TODO: rename to vline
+def add_entry_exit_vlines(axlist, formalized, entry_timestamp, entry_color,
+                          exit_timestamp, exit_color, marker_coordinate_alpha):
     """Add vertical lines between panels at entry and exit points."""
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
@@ -530,7 +558,7 @@ def create_acronym(phrase):
 
 def add_tooltips(config, axlist, price, string, color, bbox_color,
                  formalized=None, timestamp=None):
-    """Add tooltips to the specified axes list."""
+    """Add tooltips to the specified axes."""
     # Calculate x_offset and y_offset_ratios using points_to_pixels()
     # and transform(). The values are currently obtained heuristically.
     x_offset = -1.2
