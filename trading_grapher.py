@@ -243,7 +243,7 @@ def save_market_data(config, trade_data, market_data_path):
 
 
 def plot_charts(config, trade_data, market_data_path, style):
-    """Plot a trading chart with entry and exit points, and indicators."""
+    """Plot trading charts with entry and exit points, and indicators."""
     try:
         formalized = pd.read_csv(market_data_path, index_col=0,
                                  parse_dates=True)
@@ -251,9 +251,16 @@ def plot_charts(config, trade_data, market_data_path, style):
         print(e)
         sys.exit(1)
 
+    result = 0.0
+    if not pd.isna(trade_data['exit_price']):
+        if trade_data['trade_type'].lower() == 'long':
+            result = trade_data['exit_price'] - trade_data['entry_price']
+        elif trade_data['trade_type'].lower() == 'short':
+            result = trade_data['entry_price'] - trade_data['exit_price']
+
     entry_exit_timestamps = [None, None]
-    addplot = []
     long_short_markers = {'long': 'o', 'short': 'D'}
+    addplot = []
     close_open_entry_exit_hlines = [None, None, None, None]
     close_open_entry_exit_colors = [style['rc']['axes.edgecolor'],
                                     style['rc']['axes.edgecolor'],
@@ -270,52 +277,10 @@ def plot_charts(config, trade_data, market_data_path, style):
         current_open = current.dropna().head(1).open.iloc[0]
         close_open_entry_exit_hlines[1] = current_open
 
-    # TODO: create add_marker()
-    # nan is not recognized as False in a boolean context.
-    if (not pd.isna(trade_data['entry_time'])
-        and not pd.isna(trade_data['entry_price'])):
-        formalized['entry_point'] = pd.Series(dtype='float')
-        entry_exit_timestamps[0] = (
-            trade_data['entry_date']
-            + pd.Timedelta(str(trade_data['entry_time'])))
-        formalized.loc[entry_exit_timestamps[0], 'entry_point'] = (
-            trade_data['entry_price'])
-        entry_addplot = mpf.make_addplot(
-            formalized.entry_point, type='scatter', markersize=100,
-            marker=long_short_markers.get(trade_data['trade_type'].lower()),
-            color=close_open_entry_exit_colors[2], edgecolors='none',
-            alpha=style['custom_style']['marker_alpha'])
-        addplot.append(entry_addplot)
-        close_open_entry_exit_hlines[2] = trade_data['entry_price']
-        close_open_entry_exit_colors[2] = close_open_entry_exit_colors[2]
-
-    result = 0.0
-    if (not pd.isna(trade_data['exit_time'])
-        and not pd.isna(trade_data['exit_price'])):
-        if trade_data['trade_type'].lower() == 'long':
-            result = trade_data['exit_price'] - trade_data['entry_price']
-        elif trade_data['trade_type'].lower() == 'short':
-            result = trade_data['entry_price'] - trade_data['exit_price']
-        if result > 0:
-            close_open_entry_exit_colors[3] = (
-                style['custom_style']['profit_color'])
-        elif result < 0:
-            close_open_entry_exit_colors[3] = (
-                style['custom_style']['loss_color'])
-
-        formalized['exit_point'] = pd.Series(dtype='float')
-        entry_exit_timestamps[1] = (
-            trade_data['exit_date']
-            + pd.Timedelta(str(trade_data['exit_time'])))
-        formalized.loc[entry_exit_timestamps[1], 'exit_point'] = (
-            trade_data['exit_price'])
-        exit_addplot = mpf.make_addplot(
-            formalized.exit_point, type='scatter', markersize=100,
-            marker=long_short_markers.get(trade_data['trade_type'].lower()),
-            color=close_open_entry_exit_colors[3], edgecolors='none',
-            alpha=style['custom_style']['marker_alpha'])
-        addplot.append(exit_addplot)
-        close_open_entry_exit_hlines[3] = trade_data['exit_price']
+    prepare_marker_parameters(trade_data, result, formalized,
+                              entry_exit_timestamps, long_short_markers,
+                              addplot, close_open_entry_exit_hlines,
+                              close_open_entry_exit_colors, style)
 
     panel = 0
     if config['EMA'].getboolean('is_added'):
@@ -373,6 +338,7 @@ def plot_charts(config, trade_data, market_data_path, style):
                          close_open_entry_exit_colors[2],
                          formalized=formalized,
                          timestamp=entry_exit_timestamps[0])
+
     if not pd.isna(trade_data['exit_price']):
         acronym = create_acronym(trade_data['optional_exit_reason'])
         if acronym:
@@ -409,17 +375,51 @@ def plot_charts(config, trade_data, market_data_path, style):
          f"-{trade_data['symbol']}.png")))
 
 
-def append_marker_parameters(timezone,
-                             trade_data,
-                             formalized,
-                             marker,
-                             entry_color,
-                             style,
-                             addplot,
-                             hlines,
-                             colors,
-                             ):
-    """Add markers."""
+def prepare_marker_parameters(trade_data, result, formalized,
+                              entry_exit_timestamps, long_short_markers,
+                              addplot, close_open_entry_exit_hlines,
+                              close_open_entry_exit_colors, style):
+    """Prepare entry and exit marker parameters for plotting charts."""
+    # nan is not recognized as False in a boolean context.
+    if (not pd.isna(trade_data['entry_time'])
+        and not pd.isna(trade_data['entry_price'])):
+        formalized['entry_point'] = pd.Series(dtype='float')
+        entry_exit_timestamps[0] = (
+            trade_data['entry_date']
+            + pd.Timedelta(str(trade_data['entry_time'])))
+        formalized.loc[entry_exit_timestamps[0], 'entry_point'] = (
+            trade_data['entry_price'])
+        entry_addplot = mpf.make_addplot(
+            formalized.entry_point, type='scatter', markersize=100,
+            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            color=close_open_entry_exit_colors[2], edgecolors='none',
+            alpha=style['custom_style']['marker_alpha'])
+        addplot.append(entry_addplot)
+        close_open_entry_exit_colors[2] = close_open_entry_exit_colors[2]
+        close_open_entry_exit_hlines[2] = trade_data['entry_price']
+
+    if (not pd.isna(trade_data['exit_time'])
+        and not pd.isna(trade_data['exit_price'])):
+        if result > 0:
+            close_open_entry_exit_colors[3] = (
+                style['custom_style']['profit_color'])
+        elif result < 0:
+            close_open_entry_exit_colors[3] = (
+                style['custom_style']['loss_color'])
+
+        formalized['exit_point'] = pd.Series(dtype='float')
+        entry_exit_timestamps[1] = (
+            trade_data['exit_date']
+            + pd.Timedelta(str(trade_data['exit_time'])))
+        formalized.loc[entry_exit_timestamps[1], 'exit_point'] = (
+            trade_data['exit_price'])
+        exit_addplot = mpf.make_addplot(
+            formalized.exit_point, type='scatter', markersize=100,
+            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            color=close_open_entry_exit_colors[3], edgecolors='none',
+            alpha=style['custom_style']['marker_alpha'])
+        addplot.append(exit_addplot)
+        close_open_entry_exit_hlines[3] = trade_data['exit_price']
 
 
 def add_emas(config, formalized, mpf, addplot, style):
