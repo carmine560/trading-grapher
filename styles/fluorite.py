@@ -33,7 +33,9 @@ style = {'base_mpl_style': 'default',
                 'ytick.color': '#999999'},
          # The mplfinance._styledata module does not use the following
          # custom keys.
-         'tg': {'tooltip_color': 'black',
-                'neutral_color': 'lightgray',
-                'profit_color': 'mediumspringgreen',
-                'loss_color': 'hotpink'}}
+         'custom_style': {'tooltip_color': 'black',
+                          'neutral_color': 'lightgray',
+                          'profit_color': 'mediumspringgreen',
+                          'loss_color': 'hotpink',
+                          'marker_alpha': 0.2,
+                          'marker_coordinate_alpha': 0.4}}

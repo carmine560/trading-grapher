@@ -254,9 +254,9 @@ def plot_chart(config, trade_data, market_data_path, style):
     entry_timestamp = exit_timestamp = None
     addplot = []
     close_open_entry_exit_hlines = [None, None, None, None]
-    # TODO: rename tg
-    close_open_entry_exit_colors = [None, None, style['tg']['neutral_color'],
-                                    style['tg']['neutral_color']]
+    close_open_entry_exit_colors = [None, None,
+                                    style['custom_style']['neutral_color'],
+                                    style['custom_style']['neutral_color']]
 
     previous = formalized[formalized.index < trade_data['entry_date']]
     current = formalized[trade_data['entry_date'] <= formalized.index]
@@ -275,9 +275,6 @@ def plot_chart(config, trade_data, market_data_path, style):
     elif trade_data['trade_type'].lower() == 'short':
         marker = 'D'
 
-    # TODO: move to style
-    marker_alpha = 0.2
-
     # TODO: create add_marker()
     # nan is not recognized as False in a boolean context.
     if (not pd.isna(trade_data['entry_time'])
@@ -287,12 +284,11 @@ def plot_chart(config, trade_data, market_data_path, style):
                            + pd.Timedelta(str(trade_data['entry_time'])))
         formalized.loc[entry_timestamp, 'entry_point'] = (
             trade_data['entry_price'])
-        # TODO: rename to addplot
-        entry_apd = mpf.make_addplot(formalized.entry_point, type='scatter',
-                                     markersize=100, marker=marker,
-                                     color=close_open_entry_exit_colors[2],
-                                     edgecolors='none', alpha=marker_alpha)
-        addplot.append(entry_apd)
+        entry_addplot = mpf.make_addplot(
+            formalized.entry_point, type='scatter', markersize=100,
+            marker=marker, color=close_open_entry_exit_colors[2],
+            edgecolors='none', alpha=style['custom_style']['marker_alpha'])
+        addplot.append(entry_addplot)
         close_open_entry_exit_hlines[2] = trade_data['entry_price']
         close_open_entry_exit_colors[2] = close_open_entry_exit_colors[2]
 
@@ -304,23 +300,22 @@ def plot_chart(config, trade_data, market_data_path, style):
         elif trade_data['trade_type'].lower() == 'short':
             result = trade_data['entry_price'] - trade_data['exit_price']
         if result > 0:
-            close_open_entry_exit_colors[3] = style['tg']['profit_color']
+            close_open_entry_exit_colors[3] = (
+                style['custom_style']['profit_color'])
         elif result < 0:
-            close_open_entry_exit_colors[3] = style['tg']['loss_color']
+            close_open_entry_exit_colors[3] = (
+                style['custom_style']['loss_color'])
 
         formalized['exit_point'] = pd.Series(dtype='float')
         exit_timestamp = (trade_data['exit_date']
                           + pd.Timedelta(str(trade_data['exit_time'])))
         formalized.loc[exit_timestamp, 'exit_point'] = trade_data['exit_price']
-        exit_apd = mpf.make_addplot(formalized.exit_point, type='scatter',
-                                    markersize=100, marker=marker,
-                                    color=close_open_entry_exit_colors[3],
-                                    edgecolors='none', alpha=marker_alpha)
-        addplot.append(exit_apd)
+        exit_addplot = mpf.make_addplot(
+            formalized.exit_point, type='scatter', markersize=100,
+            marker=marker, color=close_open_entry_exit_colors[3],
+            edgecolors='none', alpha=style['custom_style']['marker_alpha'])
+        addplot.append(exit_addplot)
         close_open_entry_exit_hlines[3] = trade_data['exit_price']
-
-    # TODO: move to style
-    marker_coordinate_alpha = 0.4
 
     panel = 0
     if config['EMA'].getboolean('is_added'):
@@ -342,9 +337,9 @@ def plot_chart(config, trade_data, market_data_path, style):
                           color=close_open_entry_exit_colors[3], zorder=0),
         hlines=dict(hlines=close_open_entry_exit_hlines,
                     colors=close_open_entry_exit_colors, linestyle='dotted',
-                    linewidths=1, alpha=marker_coordinate_alpha),
-        returnfig=True,
-        scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
+                    linewidths=1,
+                    alpha=style['custom_style']['marker_coordinate_alpha']),
+        returnfig=True, scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
@@ -359,21 +354,21 @@ def plot_chart(config, trade_data, market_data_path, style):
     add_entry_exit_vlines(axlist, formalized, entry_timestamp,
                           close_open_entry_exit_colors[2], exit_timestamp,
                           close_open_entry_exit_colors[3],
-                          marker_coordinate_alpha)
+                          style['custom_style']['marker_coordinate_alpha'])
 
     if (previous_close and current_open != trade_data['entry_price']
         and current_open != trade_data['exit_price']):
         delta = current_open - previous_close
         string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
         add_tooltips(config, axlist, current_open, string,
-                     style['tg']['tooltip_color'],
+                     style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[1])
 
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['optional_entry_reason'])
         if acronym:
             add_tooltips(config, axlist, trade_data['entry_price'], acronym,
-                         style['tg']['tooltip_color'],
+                         style['custom_style']['tooltip_color'],
                          close_open_entry_exit_colors[2],
                          formalized=formalized, timestamp=entry_timestamp)
     if not pd.isna(trade_data['exit_price']):
@@ -384,7 +379,7 @@ def plot_chart(config, trade_data, market_data_path, style):
             string = f"{result:.1f}, {trade_data['change']:.2f}%"
 
         add_tooltips(config, axlist, trade_data['exit_price'], string,
-                     style['tg']['tooltip_color'],
+                     style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[3], formalized=formalized,
                      timestamp=exit_timestamp)
 
@@ -417,7 +412,6 @@ def append_marker_parameters(time_zone,
                              formalized,
                              marker,
                              entry_color,
-                             marker_alpha,
                              style,
                              addplot,
                              hlines,
@@ -432,11 +426,11 @@ def add_emas(config, formalized, mpf, addplot, style):
     ma_2 = ema(formalized.close, 25)
     ma_3 = ema(formalized.close, 75)
 
-    ma_apd = [
+    ma_addplot = [
         mpf.make_addplot(ma_1, color=style['mavcolors'][0], width=0.8),
         mpf.make_addplot(ma_2, color=style['mavcolors'][1], width=0.8),
         mpf.make_addplot(ma_3, color=style['mavcolors'][2], width=0.8)]
-    addplot.extend(ma_apd)
+    addplot.extend(ma_addplot)
 
 
 def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
@@ -451,7 +445,7 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
     signal = macd.ewm(span=9).mean()
     histogram = macd - signal
     panel += 1
-    macd_apd = [
+    macd_addplot = [
         mpf.make_addplot(macd, panel=panel, color=style['mavcolors'][0],
                          width=0.8, ylabel=ylabel),
         mpf.make_addplot(signal, panel=panel, color=style['mavcolors'][1],
@@ -461,7 +455,7 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
                                 else style['mavcolors'][3]
                                 for value in histogram],
                          secondary_y=False)]
-    addplot.extend(macd_apd)
+    addplot.extend(macd_addplot)
 
     return panel
 
@@ -499,13 +493,13 @@ def add_stochastics(config, formalized, panel, mpf, addplot, style):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
-    stoch_apd = [mpf.make_addplot(formalized.k, panel=panel,
-                                  color=style['mavcolors'][0], width=0.8,
-                                  ylabel='Stochastics'),
-                 mpf.make_addplot(formalized.d, panel=panel,
-                                  color=style['mavcolors'][1], width=0.8,
-                                  secondary_y=False)]
-    addplot.extend(stoch_apd)
+    stoch_addplot = [mpf.make_addplot(formalized.k, panel=panel,
+                                      color=style['mavcolors'][0], width=0.8,
+                                      ylabel='Stochastics'),
+                     mpf.make_addplot(formalized.d, panel=panel,
+                                      color=style['mavcolors'][1], width=0.8,
+                                      secondary_y=False)]
+    addplot.extend(stoch_addplot)
 
     return panel
 
@@ -528,7 +522,6 @@ def stochastics(high, low, close, k, d, smooth_k):
     return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
 
 
-# TODO: rename to vline
 def add_entry_exit_vlines(axlist, formalized, entry_timestamp, entry_color,
                           exit_timestamp, exit_color, marker_coordinate_alpha):
     """Add vertical lines between panels at entry and exit points."""
