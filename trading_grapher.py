@@ -147,6 +147,8 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'is_added': 'True'}
     config['Volume'] = {
         'is_added': 'True'}
+    config['Minor X-ticks'] = {
+        'is_added': 'True'}
     config['Tooltips'] = {
         'is_added': 'True'}
     config['Text'] = {
@@ -252,12 +254,14 @@ def plot_charts(config, trade_data, market_data_path, style):
         print(e)
         sys.exit(1)
 
-    result = 0.0
-    if not pd.isna(trade_data['exit_price']):
-        if trade_data['trade_type'].lower() == 'long':
-            result = trade_data['exit_price'] - trade_data['entry_price']
-        elif trade_data['trade_type'].lower() == 'short':
-            result = trade_data['entry_price'] - trade_data['exit_price']
+    result = 0
+    if (not pd.isna(trade_data['entry_price'])
+        and not pd.isna(trade_data['exit_price'])):
+        result = (trade_data['exit_price'] - trade_data['entry_price']
+                  if trade_data['trade_type'].lower() == 'long'
+                  else trade_data['entry_price'] - trade_data['exit_price']
+                  if trade_data['trade_type'].lower() == 'short'
+                  else 0)
 
     percentage_change = (result / trade_data['entry_price']
                          if pd.isna(trade_data['optional_percentage_change'])
@@ -287,7 +291,7 @@ def plot_charts(config, trade_data, market_data_path, style):
                               addplot, close_open_entry_exit_hlines,
                               close_open_entry_exit_colors, style)
     if None in close_open_entry_exit_hlines: # TODO
-        print('Prices contains None.')
+        print('Prices contain None.')
         return
 
     panel = 0
@@ -305,21 +309,22 @@ def plot_charts(config, trade_data, market_data_path, style):
         formalized, addplot=addplot, closefig=True,
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
         figsize=(1152 / 100, 648 / 100),
-        fill_between=dict(y1=trade_data['entry_price'],
-                          y2=trade_data['exit_price'], alpha=0.04,
-                          color=close_open_entry_exit_colors[3], zorder=0),
-        hlines=dict(hlines=close_open_entry_exit_hlines,
-                    colors=close_open_entry_exit_colors, linestyle='dotted',
-                    linewidths=1,
-                    alpha=style['custom_style']['marker_coordinate_alpha']),
+        fill_between=dict(alpha=style['custom_style']['fill_between_alpha'],
+                          color=close_open_entry_exit_colors[3],
+                          y1=trade_data['entry_price'],
+                          y2=trade_data['exit_price'], zorder=0),
+        hlines=dict(alpha=style['custom_style']['marker_coordinate_alpha'],
+                    colors=close_open_entry_exit_colors,
+                    hlines=close_open_entry_exit_hlines, linestyle='dotted',
+                    linewidths=1),
         returnfig=True, scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
 
-    left, right = axlist[0].get_xlim()
-    axlist[0].set_xticks(np.arange(left, right, 30))
-    axlist[0].set_xticks(np.arange(left, right, 10), minor=True)
+    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 30))
+    if config['Minor X-ticks'].getboolean('is_added'):
+        add_minor_xticks(axlist, style['custom_style']['minor_grid_alpha'])
 
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
@@ -330,47 +335,55 @@ def plot_charts(config, trade_data, market_data_path, style):
                           close_open_entry_exit_colors[3],
                           style['custom_style']['marker_coordinate_alpha'])
 
-    if (previous_close and current_open != trade_data['entry_price']
+    if (config['Tooltips'].getboolean('is_added') and previous_close
+        and current_open != trade_data['entry_price']
         and current_open != trade_data['exit_price']):
         delta = current_open - previous_close
         add_tooltips(config, axlist, current_open,
                      f'{delta:.1f}, {delta / previous_close * 100:.2f}%',
                      style['custom_style']['tooltip_color'],
-                     close_open_entry_exit_colors[1])
+                     close_open_entry_exit_colors[1],
+                     style['custom_style']['tooltip_bbox_alpha'])
 
-    if not pd.isna(trade_data['entry_price']):
+    if (config['Tooltips'].getboolean('is_added')
+        and not pd.isna(trade_data['entry_price'])):
         acronym = create_acronym(trade_data['optional_entry_reason'])
         add_tooltips(config, axlist, trade_data['entry_price'],
                      f'{acronym}' if acronym else '',
                      style['custom_style']['tooltip_color'],
-                     close_open_entry_exit_colors[2], formalized=formalized,
-                     timestamp=entry_exit_timestamps[0])
+                     close_open_entry_exit_colors[2],
+                     style['custom_style']['tooltip_bbox_alpha'],
+                     formalized=formalized, timestamp=entry_exit_timestamps[0])
 
-    if not pd.isna(trade_data['exit_price']):
+    if (config['Tooltips'].getboolean('is_added')
+        and not pd.isna(trade_data['exit_price'])):
         acronym = create_acronym(trade_data['optional_exit_reason'])
         add_tooltips(config, axlist, trade_data['exit_price'],
                      (f"{f'{acronym}, ' if acronym else ''}"
                       f"{result:.1f}, {percentage_change:.2f}%"),
                      style['custom_style']['tooltip_color'],
-                     close_open_entry_exit_colors[3], formalized=formalized,
-                     timestamp=entry_exit_timestamps[1])
+                     close_open_entry_exit_colors[3],
+                     style['custom_style']['tooltip_bbox_alpha'],
+                     formalized=formalized, timestamp=entry_exit_timestamps[1])
 
-    notes = []
-    for index in range(1, 11):
-        note_column = trade_data[f'optional_note_{index}']
-        if note_column:
-            notes.append(note_column)
+    if config['Text'].getboolean('is_added'):
+        notes = []
+        for index in range(1, 11):
+            note_column = trade_data[f'optional_note_{index}']
+            if note_column:
+                notes.append(note_column)
 
-    tactic = create_acronym(trade_data['optional_tactic'])
-    full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
-    add_text(axlist,
-             (f"Trade {trade_data['optional_number']}"
-              f" for {trade_data['symbol']}"
-              f" using {trade_data['trade_type'].title()}"
-              f"{f' {tactic}' if tactic else ''}"
-              f" on {trade_data['entry_date'].strftime(full_date_format)}"
-              f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}"),
-             pd.Series(notes).dropna(), style['facecolor'])
+        tactic = create_acronym(trade_data['optional_tactic'])
+        full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
+        add_text(axlist,
+                 (f"Trade {trade_data['optional_number']}"
+                  f" for {trade_data['symbol']}"
+                  f" using {trade_data['trade_type'].title()}"
+                  f"{f' {tactic}' if tactic else ''}"
+                  f" on {trade_data['entry_date'].strftime(full_date_format)}"
+                  f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}"),
+                 pd.Series(notes).dropna(), style['facecolor'],
+                 style['custom_style']['text_bbox_alpha'])
 
     fig.savefig(os.path.join(
         config['General']['trading_directory'],
@@ -394,10 +407,11 @@ def prepare_marker_parameters(trade_data, result, formalized,
         formalized.loc[entry_exit_timestamps[0], 'entry_point'] = (
             trade_data['entry_price'])
         entry_addplot = mpf.make_addplot(
-            formalized.entry_point, type='scatter', markersize=100,
-            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            formalized.entry_point,
+            alpha=style['custom_style']['marker_alpha'],
             color=close_open_entry_exit_colors[2], edgecolors='none',
-            alpha=style['custom_style']['marker_alpha'])
+            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            markersize=100, type='scatter')
         addplot.append(entry_addplot)
         close_open_entry_exit_colors[2] = close_open_entry_exit_colors[2]
         close_open_entry_exit_hlines[2] = trade_data['entry_price']
@@ -418,10 +432,10 @@ def prepare_marker_parameters(trade_data, result, formalized,
         formalized.loc[entry_exit_timestamps[1], 'exit_point'] = (
             trade_data['exit_price'])
         exit_addplot = mpf.make_addplot(
-            formalized.exit_point, type='scatter', markersize=100,
-            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            formalized.exit_point, alpha=style['custom_style']['marker_alpha'],
             color=close_open_entry_exit_colors[3], edgecolors='none',
-            alpha=style['custom_style']['marker_alpha'])
+            marker=long_short_markers.get(trade_data['trade_type'].lower()),
+            markersize=100, type='scatter')
         addplot.append(exit_addplot)
         close_open_entry_exit_hlines[3] = trade_data['exit_price']
 
@@ -452,15 +466,16 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
     histogram = macd - signal
     panel += 1
     macd_addplot = [
-        mpf.make_addplot(macd, panel=panel, color=style['mavcolors'][0],
+        mpf.make_addplot(macd, color=style['mavcolors'][0], panel=panel,
                          width=0.8, ylabel=ylabel),
-        mpf.make_addplot(signal, panel=panel, color=style['mavcolors'][1],
-                         width=0.8, secondary_y=False),
-        mpf.make_addplot(histogram, type='bar', width=1.0, panel=panel,
+        mpf.make_addplot(signal, color=style['mavcolors'][1], panel=panel,
+                         secondary_y=False, width=0.8),
+        mpf.make_addplot(histogram,
                          color=[style['mavcolors'][2] if value >= 0
                                 else style['mavcolors'][3]
                                 for value in histogram],
-                         secondary_y=False)]
+                         panel=panel, secondary_y=False, type='bar',
+                         width=1.0)]
     addplot.extend(macd_addplot)
 
     return panel
@@ -499,12 +514,12 @@ def add_stochastics(config, formalized, panel, mpf, addplot, style):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
-    stoch_addplot = [mpf.make_addplot(formalized.k, panel=panel,
-                                      color=style['mavcolors'][0], width=0.8,
-                                      ylabel='Stochastics'),
-                     mpf.make_addplot(formalized.d, panel=panel,
-                                      color=style['mavcolors'][1], width=0.8,
-                                      secondary_y=False)]
+    stoch_addplot = [mpf.make_addplot(formalized.k,
+                                      color=style['mavcolors'][0], panel=panel,
+                                      width=0.8, ylabel='Stochastics'),
+                     mpf.make_addplot(formalized.d,
+                                      color=style['mavcolors'][1], panel=panel,
+                                      secondary_y=False, width=0.8)]
     addplot.extend(stoch_addplot)
 
     return panel
@@ -528,12 +543,19 @@ def stochastics(high, low, close, k, d, smooth_k):
     return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
 
 
+def add_minor_xticks(axlist, minor_grid_alpha):
+    """Add minor x-ticks and their grid between panels."""
+    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 10), minor=True)
+    for index, _ in enumerate(axlist):
+        if (index % 2) == 0:
+            axlist[index].grid(which='minor', alpha=minor_grid_alpha)
+
+
 def add_entry_exit_vlines(axlist, formalized, entry_timestamp, entry_color,
                           exit_timestamp, exit_color, marker_coordinate_alpha):
     """Add vertical lines between panels at entry and exit points."""
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
-            axlist[index].grid(which='minor', alpha=0.2)
             if entry_timestamp:
                 axlist[index].axvline(
                     x=formalized.index.get_loc(entry_timestamp),
@@ -555,18 +577,15 @@ def create_acronym(phrase):
     return acronym
 
 
-def add_tooltips(config, axlist, price, string, color, bbox_color,
+def add_tooltips(config, axlist, price, string, color, bbox_color, bbox_alpha,
                  formalized=None, timestamp=None):
     """Add tooltips to the specified axes."""
     # Calculate x_offset and y_offset_ratios using points_to_pixels()
     # and transform(). The values are currently obtained heuristically.
     x_offset = -1.2
-    alpha = 0.8
-    bbox_alpha = 0.6
-
-    axlist[0].text(x_offset, price, string, alpha=alpha, c=color, size='small',
-                   ha='right', va='center',
-                   bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha,
+    axlist[0].text(x_offset, price, string, c=color, ha='right', size='small',
+                   va='center',
+                   bbox=dict(alpha=bbox_alpha, boxstyle='round, pad=0.2',
                              ec='none', fc=bbox_color))
 
     if timestamp:
@@ -578,13 +597,13 @@ def add_tooltips(config, axlist, price, string, color, bbox_color,
         axlist[last_primary_axes].text(
             formalized.index.get_loc(timestamp),
             bottom + y_offset_ratio * (top - bottom),
-            timestamp.strftime(TIME_FORMAT), alpha=alpha, c=color,
-            size='small', ha='center', va='top',
-            bbox=dict(boxstyle='round, pad=0.2', alpha=bbox_alpha, ec='none',
+            timestamp.strftime(TIME_FORMAT), c=color, ha='center',
+            size='small', va='top',
+            bbox=dict(alpha=bbox_alpha, boxstyle='round, pad=0.2', ec='none',
                       fc=bbox_color))
 
 
-def add_text(axlist, title, note_series, bbox_color):
+def add_text(axlist, title, note_series, bbox_color, bbox_alpha):
     """Add a title and notes to the last primary axes."""
     # Use the last panel to prevent other panels from overwriting the
     # text.
@@ -606,19 +625,21 @@ def add_text(axlist, title, note_series, bbox_color):
     y_offset_ratio = y_offset_ratios.get(last_primary_axes)
     y = top + panel_offset_factor + y_offset_ratio * height
 
-    axlist[last_primary_axes].text(x_offset, y, title, weight='bold', va='top')
+    axlist[last_primary_axes].text(
+        x_offset, y, title, va='top', weight='bold',
+        bbox=dict(alpha=bbox_alpha, boxstyle='square, pad=0.0', ec='none',
+                  fc=bbox_color))
 
     notes = ''
     for note_index, value in note_series.items():
-        if note_index == 0:
-            notes = f'\n{note_index + 1}. {value}'
-        else:
-            notes = f'{notes}\n{note_index + 1}. {value}'
+        notes = (f'\n{note_index + 1}. {value}' if note_index == 0
+                 else f'{notes}\n{note_index + 1}. {value}')
 
     if notes:
         axlist[last_primary_axes].text(
             x_offset, y, notes, va='top', zorder=1,
-            bbox=dict(alpha=0.5, ec='none', fc=bbox_color))
+            bbox=dict(alpha=bbox_alpha, boxstyle='square, pad=0.0', ec='none',
+                      fc=bbox_color))
 
 
 if __name__ == '__main__':
