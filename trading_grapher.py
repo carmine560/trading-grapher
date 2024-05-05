@@ -52,7 +52,8 @@ def main():
                                'optional_tactic', 'entry_date', 'entry_time',
                                'entry_price', 'optional_entry_reason',
                                'exit_date', 'exit_time', 'exit_price',
-                               'optional_exit_reason', 'change']
+                               'optional_exit_reason',
+                               'optional_percentage_change']
     for i in range(1, 11):
         trading_journal_columns.append(f'optional_note_{i}')
 
@@ -133,7 +134,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'exit_time': 'Exit time',
         'exit_price': 'Exit price',
         'optional_exit_reason': 'Exit reason',
-        'change': 'Change',   # TODO: calculate change and add optional_ prefix
+        'optional_percentage_change': 'Percentage Change',
         'optional_chart_file': 'optional_chart_file'}
     for index in range(1, 11):
         config['Trading Journal'][f'optional_note_{index}'] = f'Note {index}'
@@ -258,6 +259,10 @@ def plot_charts(config, trade_data, market_data_path, style):
         elif trade_data['trade_type'].lower() == 'short':
             result = trade_data['entry_price'] - trade_data['exit_price']
 
+    percentage_change = (result / trade_data['entry_price']
+                         if pd.isna(trade_data['optional_percentage_change'])
+                         else trade_data['optional_percentage_change'])
+
     entry_exit_timestamps = [None, None]
     long_short_markers = {'long': 'o', 'short': 'D'}
     addplot = []
@@ -281,6 +286,9 @@ def plot_charts(config, trade_data, market_data_path, style):
                               entry_exit_timestamps, long_short_markers,
                               addplot, close_open_entry_exit_hlines,
                               close_open_entry_exit_colors, style)
+    if None in close_open_entry_exit_hlines: # TODO
+        print('Prices contains None.')
+        return
 
     panel = 0
     if config['EMA'].getboolean('is_added'):
@@ -325,28 +333,24 @@ def plot_charts(config, trade_data, market_data_path, style):
     if (previous_close and current_open != trade_data['entry_price']
         and current_open != trade_data['exit_price']):
         delta = current_open - previous_close
-        string = f'{delta:.1f}, {delta / previous_close * 100:.2f}%'
-        add_tooltips(config, axlist, current_open, string,
+        add_tooltips(config, axlist, current_open,
+                     f'{delta:.1f}, {delta / previous_close * 100:.2f}%',
                      style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[1])
 
     if not pd.isna(trade_data['entry_price']):
         acronym = create_acronym(trade_data['optional_entry_reason'])
-        if acronym:
-            add_tooltips(config, axlist, trade_data['entry_price'], acronym,
-                         style['custom_style']['tooltip_color'],
-                         close_open_entry_exit_colors[2],
-                         formalized=formalized,
-                         timestamp=entry_exit_timestamps[0])
+        add_tooltips(config, axlist, trade_data['entry_price'],
+                     f'{acronym}' if acronym else '',
+                     style['custom_style']['tooltip_color'],
+                     close_open_entry_exit_colors[2], formalized=formalized,
+                     timestamp=entry_exit_timestamps[0])
 
     if not pd.isna(trade_data['exit_price']):
         acronym = create_acronym(trade_data['optional_exit_reason'])
-        if acronym:
-            string = f"{acronym}, {result:.1f}, {trade_data['change']:.2f}%"
-        else:
-            string = f"{result:.1f}, {trade_data['change']:.2f}%"
-
-        add_tooltips(config, axlist, trade_data['exit_price'], string,
+        add_tooltips(config, axlist, trade_data['exit_price'],
+                     (f"{f'{acronym}, ' if acronym else ''}"
+                      f"{result:.1f}, {percentage_change:.2f}%"),
                      style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[3], formalized=formalized,
                      timestamp=entry_exit_timestamps[1])
