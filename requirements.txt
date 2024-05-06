@@ -1,5 +1,4 @@
 mplfinance
-numpy
 odfpy
 pandas
 prompt_toolkit

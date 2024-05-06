@@ -6,7 +6,6 @@ import argparse
 import configparser
 import importlib
 import os
-import re
 import sys
 
 from yahoo_finance_api2 import share
@@ -27,6 +26,9 @@ def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
+        '-G', action='store_true',
+        help='configure general options and exit')
+    group.add_argument(
         '-C', action='store_true',
         help='check configuration changes and exit')
     parser.add_argument('dates', nargs='*',
@@ -35,12 +37,19 @@ def main():
     args = parser.parse_args()
 
     config_path = file_utilities.get_config_path(__file__)
-    if args.C:
+    backup_parameters = {'number_of_backups': 8}
+
+    if any((args.G,)):
+        config = configure(config_path, can_interpolate=False)
+        if args.G and configuration.modify_section(
+                config, 'General', config_path,
+                backup_parameters=backup_parameters):
+            return
+    elif args.C:
         default_config = configure(config_path, can_interpolate=False,
                                    can_override=False)
         configuration.check_config_changes(
-            default_config, config_path,
-            backup_parameters={'number_of_backups': 8})
+            default_config, config_path, backup_parameters=backup_parameters)
         return
     else:
         config = configure(config_path)
@@ -117,8 +126,14 @@ def configure(config_path, can_interpolate=True, can_override=True):
                                           'Documents/Trading'),
         'trading_path': os.path.join('${trading_directory}', 'Trading.ods'),
         'trading_sheet': 'Trading Journal',
-        'style': 'fluorite'}    # TODO: add ametrine
+        # TODO: consider section
+        # TODO: add completion
+        'start_time': '${Market Data:opening_time}',
+        'end_time': '${Market Data:closing_time}',
+        'style': 'fluorite'}    # TODO: add ametrine and amber
     config['Market Data'] = {
+        'opening_time': '09:00:00',
+        'closing_time': '15:30:00',
         'timezone': 'Asia/Tokyo'}
 
     config['Trading Journal'] = {
@@ -156,7 +171,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
 
     if can_override:
         configuration.read_config(config, config_path)
-        # configuration.write_config(config, config_path)  # TODO
+        configuration.write_config(config, config_path)  # TODO
 
     return config
 
@@ -247,6 +262,9 @@ def save_market_data(config, trade_data, market_data_path):
 
 def plot_charts(config, trade_data, market_data_path, style):
     """Plot trading charts with entry and exit points, and indicators."""
+    def create_timestamp(date, time):
+        return date + pd.Timedelta(time) if time else None
+
     try:
         formalized = pd.read_csv(market_data_path, index_col=0,
                                  parse_dates=True)
@@ -267,7 +285,14 @@ def plot_charts(config, trade_data, market_data_path, style):
                          if pd.isna(trade_data['optional_percentage_change'])
                          else trade_data['optional_percentage_change'])
 
-    entry_exit_timestamps = [None, None]
+    timestamps = {'start': create_timestamp(trade_data['entry_date'],
+                                            config['General']['start_time']),
+                  'end': create_timestamp(trade_data['entry_date'],
+                                          config['General']['end_time']),
+                  'entry': None, 'exit': None}
+    if isinstance(timestamps['end'], pd.Timestamp):
+        timestamps['end'] = min(formalized.tail(1).index[0], timestamps['end'])
+
     long_short_markers = {'long': 'o', 'short': 'D'}
     addplot = []
     close_open_entry_exit_hlines = [None, None, None, None]
@@ -287,11 +312,11 @@ def plot_charts(config, trade_data, market_data_path, style):
         close_open_entry_exit_hlines[1] = current_open
 
     prepare_marker_parameters(trade_data, result, formalized,
-                              entry_exit_timestamps, long_short_markers,
+                              timestamps, long_short_markers,
                               addplot, close_open_entry_exit_hlines,
                               close_open_entry_exit_colors, style)
     if None in close_open_entry_exit_hlines: # TODO
-        print('Prices contain None.')
+        print('Key trading prices are incomplete.')
         return
 
     panel = 0
@@ -312,7 +337,7 @@ def plot_charts(config, trade_data, market_data_path, style):
         fill_between=dict(alpha=style['custom_style']['fill_between_alpha'],
                           color=close_open_entry_exit_colors[3],
                           y1=trade_data['entry_price'],
-                          y2=trade_data['exit_price'], zorder=0),
+                          y2=trade_data['exit_price'], zorder=1),
         hlines=dict(alpha=style['custom_style']['marker_coordinate_alpha'],
                     colors=close_open_entry_exit_colors,
                     hlines=close_open_entry_exit_hlines, linestyle='dotted',
@@ -322,18 +347,15 @@ def plot_charts(config, trade_data, market_data_path, style):
         tight_layout=True, type='candle',
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
 
+    add_vertical_elements(axlist, formalized, timestamps,
+                          close_open_entry_exit_colors, style)
+
     axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 30))
     if config['Minor X-ticks'].getboolean('is_added'):
         add_minor_xticks(axlist, style['custom_style']['minor_grid_alpha'])
 
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
-
-    add_entry_exit_vlines(axlist, formalized, entry_exit_timestamps[0],
-                          close_open_entry_exit_colors[2],
-                          entry_exit_timestamps[1],
-                          close_open_entry_exit_colors[3],
-                          style['custom_style']['marker_coordinate_alpha'])
 
     if (config['Tooltips'].getboolean('is_added') and previous_close
         and current_open != trade_data['entry_price']
@@ -347,24 +369,26 @@ def plot_charts(config, trade_data, market_data_path, style):
 
     if (config['Tooltips'].getboolean('is_added')
         and not pd.isna(trade_data['entry_price'])):
-        acronym = create_acronym(trade_data['optional_entry_reason'])
+        acronym = file_utilities.create_acronym(
+            trade_data['optional_entry_reason'])
         add_tooltips(config, axlist, trade_data['entry_price'],
                      f'{acronym}' if acronym else '',
                      style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[2],
                      style['custom_style']['tooltip_bbox_alpha'],
-                     formalized=formalized, timestamp=entry_exit_timestamps[0])
+                     formalized=formalized, timestamp=timestamps['entry'])
 
     if (config['Tooltips'].getboolean('is_added')
         and not pd.isna(trade_data['exit_price'])):
-        acronym = create_acronym(trade_data['optional_exit_reason'])
+        acronym = file_utilities.create_acronym(
+            trade_data['optional_exit_reason'])
         add_tooltips(config, axlist, trade_data['exit_price'],
                      (f"{f'{acronym}, ' if acronym else ''}"
                       f"{result:.1f}, {percentage_change:.2f}%"),
                      style['custom_style']['tooltip_color'],
                      close_open_entry_exit_colors[3],
                      style['custom_style']['tooltip_bbox_alpha'],
-                     formalized=formalized, timestamp=entry_exit_timestamps[1])
+                     formalized=formalized, timestamp=timestamps['exit'])
 
     if config['Text'].getboolean('is_added'):
         notes = []
@@ -373,7 +397,7 @@ def plot_charts(config, trade_data, market_data_path, style):
             if note_column:
                 notes.append(note_column)
 
-        tactic = create_acronym(trade_data['optional_tactic'])
+        tactic = file_utilities.create_acronym(trade_data['optional_tactic'])
         full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
         add_text(axlist,
                  (f"Trade {trade_data['optional_number']}"
@@ -393,7 +417,7 @@ def plot_charts(config, trade_data, market_data_path, style):
 
 
 def prepare_marker_parameters(trade_data, result, formalized,
-                              entry_exit_timestamps, long_short_markers,
+                              timestamps, long_short_markers,
                               addplot, close_open_entry_exit_hlines,
                               close_open_entry_exit_colors, style):
     """Prepare entry and exit marker parameters for plotting charts."""
@@ -401,10 +425,10 @@ def prepare_marker_parameters(trade_data, result, formalized,
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
-        entry_exit_timestamps[0] = (
+        timestamps['entry'] = (
             trade_data['entry_date']
             + pd.Timedelta(str(trade_data['entry_time'])))
-        formalized.loc[entry_exit_timestamps[0], 'entry_point'] = (
+        formalized.loc[timestamps['entry'], 'entry_point'] = (
             trade_data['entry_price'])
         entry_addplot = mpf.make_addplot(
             formalized.entry_point,
@@ -426,10 +450,10 @@ def prepare_marker_parameters(trade_data, result, formalized,
                 style['custom_style']['loss_color'])
 
         formalized['exit_point'] = pd.Series(dtype='float')
-        entry_exit_timestamps[1] = (
+        timestamps['exit'] = (
             trade_data['exit_date']
             + pd.Timedelta(str(trade_data['exit_time'])))
-        formalized.loc[entry_exit_timestamps[1], 'exit_point'] = (
+        formalized.loc[timestamps['exit'], 'exit_point'] = (
             trade_data['exit_price'])
         exit_addplot = mpf.make_addplot(
             formalized.exit_point, alpha=style['custom_style']['marker_alpha'],
@@ -551,30 +575,33 @@ def add_minor_xticks(axlist, minor_grid_alpha):
             axlist[index].grid(which='minor', alpha=minor_grid_alpha)
 
 
-def add_entry_exit_vlines(axlist, formalized, entry_timestamp, entry_color,
-                          exit_timestamp, exit_color, marker_coordinate_alpha):
-    """Add vertical lines between panels at entry and exit points."""
+def add_vertical_elements(axlist, formalized, timestamps,
+                          close_open_entry_exit_colors, style):
+    """Add vertical elements between panels at the specified timestamps."""
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
-            if entry_timestamp:
+            if timestamps['start'] and timestamps['end']:
+                # Force a redraw of the y-limits to ensure all plot
+                # elements are taken into account.
+                axlist[index].set_ylim(*axlist[index].get_ylim())
+                axlist[index].fill_betweenx(
+                    axlist[index].get_ylim(),
+                    formalized.index.get_loc(timestamps['start']),
+                    formalized.index.get_loc(timestamps['end']),
+                    facecolor=style['custom_style']['active_hours_color'],
+                    zorder=0)
+            if timestamps['entry']:
                 axlist[index].axvline(
-                    x=formalized.index.get_loc(entry_timestamp),
-                    color=entry_color, linestyle='dotted', linewidth=1,
-                    alpha=marker_coordinate_alpha)
-            if exit_timestamp:
+                    alpha=style['custom_style']['marker_coordinate_alpha'],
+                    color=close_open_entry_exit_colors[2], linestyle='dotted',
+                    linewidth=1,
+                    x=formalized.index.get_loc(timestamps['entry']))
+            if timestamps['exit']:
                 axlist[index].axvline(
-                    x=formalized.index.get_loc(exit_timestamp),
-                    color=exit_color, linestyle='dotted', linewidth=1,
-                    alpha=marker_coordinate_alpha)
-
-
-def create_acronym(phrase):
-    """Generate an acronym from the given phrase."""
-    acronym = ''
-    if isinstance(phrase, str):
-        for word in re.split(r'[\W_]+', phrase):
-            acronym = acronym + word[0].upper()
-    return acronym
+                    alpha=style['custom_style']['marker_coordinate_alpha'],
+                    color=close_open_entry_exit_colors[3], linestyle='dotted',
+                    linewidth=1,
+                    x=formalized.index.get_loc(timestamps['exit']))
 
 
 def add_tooltips(config, axlist, price, string, color, bbox_color, bbox_alpha,
