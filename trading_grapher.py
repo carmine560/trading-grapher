@@ -281,7 +281,7 @@ def plot_charts(config, trade_data, market_data_path, style):
                   if trade_data['trade_type'].lower() == 'short'
                   else 0)
 
-    percentage_change = (result / trade_data['entry_price']
+    percentage_change = (100 * result / trade_data['entry_price']
                          if pd.isna(trade_data['optional_percentage_change'])
                          else trade_data['optional_percentage_change'])
 
