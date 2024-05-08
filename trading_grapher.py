@@ -25,9 +25,19 @@ def main():
     """Parse trade dates, save market data, plot charts, and check charts."""
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
+    parser.add_argument(
+        '-f', metavar='FILE', nargs=1,
+        help='specify the file path to the trading journal spreadsheet')
+    parser.add_argument(
+        '-d', metavar='DIRECTORY', nargs=1,
+        help='specify the directory path'
+        ' for storing historical data and charts')
     group.add_argument(
         '-G', action='store_true',
         help='configure general options and exit')
+    group.add_argument(
+        '-J', action='store_true',
+        help='configure the columns of the trading journal and exit')
     group.add_argument(
         '-C', action='store_true',
         help='check configuration changes and exit')
@@ -39,10 +49,14 @@ def main():
     config_path = file_utilities.get_config_path(__file__)
     backup_parameters = {'number_of_backups': 8}
 
-    if any((args.G,)):
+    if any((args.G, args.J)):
         config = configure(config_path, can_interpolate=False)
         if args.G and configuration.modify_section(
                 config, 'General', config_path,
+                backup_parameters=backup_parameters):
+            return
+        if args.J and configuration.modify_section(
+                config, 'Trading Journal', config_path,
                 backup_parameters=backup_parameters):
             return
     elif args.C:
@@ -54,9 +68,12 @@ def main():
     else:
         config = configure(config_path)
 
+    trading_path = args.f[0] if args.f else config['General']['trading_path']
+    charts_directory = (args.d[0] if args.d
+                        else config['General']['charts_directory'])
+
     trading_journal = pd.read_excel(
-        config['General']['trading_path'],
-        sheet_name=config['General']['trading_sheet'])
+        trading_path, sheet_name=config['General']['trading_sheet'])
     trading_journal_columns = ['optional_number', 'symbol', 'trade_type',
                                'optional_tactic', 'entry_date', 'entry_time',
                                'entry_price', 'optional_entry_reason',
@@ -95,20 +112,20 @@ def main():
                     trade_data['exit_date'].tz_localize(
                         config['Market Data']['timezone']))
                 market_data_path = os.path.join(
-                    config['General']['charts_directory'],
+                    charts_directory,
                     f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
                     f"-{trade_data['symbol']}.csv")
 
                 save_market_data(config, trade_data, market_data_path)
-                plot_charts(config, trade_data, market_data_path, style)
+                plot_charts(config, trade_data, market_data_path, style,
+                            charts_directory)
                 has_plotted = True
 
     if (has_plotted
         and config['Trading Journal']['optional_chart_file']
         in trading_journal.columns):
         file_utilities.compare_directory_list(
-            config['General']['charts_directory'],
-            r'\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png',
+            charts_directory, r'\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png',
             trading_journal[config['Trading Journal']['optional_chart_file']])
 
 
@@ -126,7 +143,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'trading_sheet': 'Trading Journal',
         # TODO: add completion
         'style': 'fluorite',    # TODO: add ametrine and amber
-        # TODO: add option '2022-12-14'
         'charts_directory': os.path.join(os.path.expanduser('~'),
                                          'Documents/Trading')}
     config['Market Data'] = {
@@ -134,7 +150,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'closing_time': '15:30:00',
         'timezone': 'Asia/Tokyo'}
 
-    config['Trading Journal'] = { # TODO: add -J
+    config['Trading Journal'] = {
         'optional_number': 'Number',
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
@@ -174,7 +190,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
 
     if can_override:
         configuration.read_config(config, config_path)
-        configuration.write_config(config, config_path)  # TODO
 
     return config
 
@@ -264,7 +279,7 @@ def save_market_data(config, trade_data, market_data_path):
             sys.exit(1)
 
 
-def plot_charts(config, trade_data, market_data_path, style):
+def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     """Plot trading charts with entry and exit points, and indicators."""
     def create_timestamp(date, time):
         return date + pd.Timedelta(time) if time else None
@@ -414,11 +429,10 @@ def plot_charts(config, trade_data, market_data_path, style):
                  pd.Series(notes).dropna(), style['facecolor'],
                  style['custom_style']['text_bbox_alpha'])
 
-    fig.savefig(os.path.join(
-        config['General']['charts_directory'],
-        f"{trade_data['entry_date'].strftime('%Y-%m-%d')}"
-        f"-{int(trade_data['optional_number']):02}"
-        f"-{trade_data['symbol']}.png"))
+    fig.savefig(os.path.join(charts_directory,
+                             f"{trade_data['entry_date'].strftime('%Y-%m-%d')}"
+                             f"-{int(trade_data['optional_number']):02}"
+                             f"-{trade_data['symbol']}.png"))
 
 
 def prepare_marker_parameters(formalized, trade_data, result, style,
