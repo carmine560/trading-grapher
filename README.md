@@ -44,7 +44,17 @@ python -m pip install -r requirements.txt -U
   * `-J`: configure the columns of the trading journal and exit
   * `-C`: check configuration changes and exit
 
-## Examples ##
+## Styles ##
+
+`trading_grapher.py` has the following styles.
+
+### Fluorite ###
+
+![Fluorite](examples/2024-05-02-03-9501.png)
+
+### Ametrine ###
+
+### Amber ###
 
 ## License ##
 
