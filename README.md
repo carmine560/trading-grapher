@@ -35,6 +35,14 @@ python -m pip install -r requirements.txt -U
 
 ## Usage ##
 
+``` shell
+python trading_grapher.py -G
+```
+
+``` shell
+python trading_grapher.py -J
+```
+
 ### Options ###
 
   * `-f FILE`: specify the file path to the trading journal spreadsheet
@@ -46,15 +54,20 @@ python -m pip install -r requirements.txt -U
 
 ## Styles ##
 
-`trading_grapher.py` has the following styles.
+`trading_grapher.py` provides the following selectable styles as modules, which
+you can specify using the `-G` option.
 
-### Fluorite ###
+### `fluorite` ###
 
-![Fluorite](examples/2024-05-02-03-9501.png)
+![Fluorite](examples/fluorite.png)
 
-### Ametrine ###
+### `ametrine` ###
 
-### Amber ###
+![Ametrine](examples/ametrine.png)
+
+### `amber` ###
+
+![Amber](examples/amber.png)
 
 ## License ##
 
