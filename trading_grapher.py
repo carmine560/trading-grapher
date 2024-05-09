@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Visualize trading data using charts and technical indicators."""
+"""Visualize trade data using charts and technical indicators."""
 
 import argparse
 import configparser
@@ -22,30 +22,8 @@ TIME_FORMAT = '%-H:%M'
 
 
 def main():
-    """Parse trade dates, save market data, plot charts, and check charts."""
-    parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group()
-    parser.add_argument(
-        '-f', metavar='FILE', nargs=1,
-        help='specify the file path to the trading journal spreadsheet')
-    parser.add_argument(
-        '-d', metavar='DIRECTORY', nargs=1,
-        help='specify the directory path'
-        ' for storing historical data and charts')
-    group.add_argument(
-        '-G', action='store_true',
-        help='configure general options and exit')
-    group.add_argument(
-        '-J', action='store_true',
-        help='configure the columns of the trading journal and exit')
-    group.add_argument(
-        '-C', action='store_true',
-        help='check configuration changes and exit')
-    parser.add_argument('dates', nargs='*',
-                        default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
-                        help='specify dates in the format %%Y-%%m-%%d')
-    args = parser.parse_args()
-
+    """Parse trade data, save market data, plot charts, and check charts."""
+    args = get_arguments()
     config_path = file_utilities.get_config_path(__file__)
     backup_parameters = {'number_of_backups': 8}
 
@@ -67,6 +45,10 @@ def main():
         return
     else:
         config = configure(config_path)
+
+    if args.B:
+        file_utilities.create_bash_wrapper(__file__, args.B)
+        return
 
     trading_path = args.f[0] if args.f else config['General']['trading_path']
     charts_directory = (args.d[0] if args.d
@@ -129,6 +111,42 @@ def main():
             trading_journal[config['Trading Journal']['optional_chart_file']])
 
 
+def get_arguments():
+    """Parse and return command-line arguments."""
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+
+    parser.add_argument(
+        'dates', nargs='*',
+        default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
+        help='specify dates in the format %%Y-%%m-%%d')
+    parser.add_argument(
+        '-f', nargs=1,
+        help='specify the file path to the trading journal spreadsheet',
+        metavar='FILE')
+    parser.add_argument(
+        '-d', nargs=1,
+        help='specify the directory path'
+        ' for storing historical data and charts',
+        metavar='DIRECTORY')
+    group.add_argument(
+        '-B', nargs='?', const='.',
+        help=f'generate a Bash script for running {os.path.basename(__file__)}'
+        ' with an optional output directory',
+        metavar='DIRECTORY')
+    group.add_argument(
+        '-G', action='store_true',
+        help='configure general options and exit')
+    group.add_argument(
+        '-J', action='store_true',
+        help='configure the columns of the trading journal and exit')
+    group.add_argument(
+        '-C', action='store_true',
+        help='check configuration changes and exit')
+
+    return parser.parse_args()
+
+
 def configure(config_path, can_interpolate=True, can_override=True):
     """Get the configuration parser object with the set up configuration."""
     if can_interpolate:
@@ -150,7 +168,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'closing_time': '15:30:00',
         'timezone': 'Asia/Tokyo'}
 
-    config['Trading Journal'] = {
+    config['Trading Journal'] = { # TODO: add completion
         'optional_number': 'Number',
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
@@ -281,7 +299,7 @@ def save_market_data(config, trade_data, market_data_path):
 
 def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     """Plot trading charts with entry and exit points, and indicators."""
-    def create_timestamp(date, time):
+    def create_timestamp(date, time): # TODO: add isna()
         return date + pd.Timedelta(time) if time else None
 
     try:
