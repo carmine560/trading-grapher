@@ -35,15 +35,25 @@ python -m pip install -r requirements.txt -U
 
 ## Usage ##
 
+First, configure the path to your trading journal spreadsheet, the sheet name,
+and the directory path for storing historical data and charts:
+
 ``` shell
 python trading_grapher.py -G
 ```
+
+Next, configure the columns of the trading journal:
 
 ``` shell
 python trading_grapher.py -J
 ```
 
-`~/.config/trading-grapher/trading_grapher.ini`
+The `~/.config/trading-grapher/trading_grapher.ini` configuration file stores
+the configurations above. Then:
+
+``` shell
+python trading_grapher.py [%Y-%m-%d ...]
+```
 
 ### Options ###
 
@@ -58,8 +68,8 @@ python trading_grapher.py -J
 
 ## Styles ##
 
-`trading_grapher.py` provides the following selectable styles as modules, which
-you can specify using the `-G` option.
+`trading_grapher.py` provides the following style modules, which you can
+specify using the `-G` option.
 
 ### `fluorite` ###
 

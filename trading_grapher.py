@@ -17,6 +17,7 @@ import pandas as pd
 import configuration
 import file_utilities
 
+ISO_DATE_FORMAT = '%Y-%m-%d'
 DATE_FORMAT = '%b %-d'
 TIME_FORMAT = '%-H:%M'
 
@@ -56,14 +57,12 @@ def main():
 
     trading_journal = pd.read_excel(
         trading_path, sheet_name=config['General']['trading_sheet'])
-    trading_journal_columns = ['optional_number', 'symbol', 'trade_type',
-                               'optional_tactic', 'entry_date', 'entry_time',
-                               'entry_price', 'optional_entry_reason',
-                               'exit_date', 'exit_time', 'exit_price',
-                               'optional_exit_reason',
-                               'optional_percentage_change']
-    for i in range(1, 11):
-        trading_journal_columns.append(f'optional_note_{i}')
+    trading_journal_columns = (
+        ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
+         'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
+         'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
+         'optional_percentage_change']
+        + [f'optional_note_{index}' for index in range(1, 11)])
 
     try:
         style = importlib.import_module(
@@ -95,7 +94,7 @@ def main():
                         config['Market Data']['timezone']))
                 market_data_path = os.path.join(
                     charts_directory,
-                    f"{trade_data['entry_date'].strftime('%Y-%m-%d')}-00"
+                    f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
                     f"-{trade_data['symbol']}.csv")
 
                 save_market_data(config, trade_data, market_data_path)
@@ -118,7 +117,7 @@ def get_arguments():
 
     parser.add_argument(
         'dates', nargs='*',
-        default=[pd.Timestamp.now().strftime('%Y-%m-%d')],
+        default=[pd.Timestamp.now().strftime(ISO_DATE_FORMAT)],
         help='specify dates in the format %%Y-%%m-%%d')
     parser.add_argument(
         '-f', nargs=1,
@@ -447,10 +446,11 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                  pd.Series(notes).dropna(), style['facecolor'],
                  style['custom_style']['text_bbox_alpha'])
 
-    fig.savefig(os.path.join(charts_directory,
-                             f"{trade_data['entry_date'].strftime('%Y-%m-%d')}"
-                             f"-{int(trade_data['optional_number']):02}"
-                             f"-{trade_data['symbol']}.png"))
+    fig.savefig(os.path.join(
+        charts_directory,
+        f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
+        f"-{int(trade_data['optional_number']):02}"
+        f"-{trade_data['symbol']}.png"))
 
 
 def prepare_marker_parameters(formalized, trade_data, result, style,
