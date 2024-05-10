@@ -13,8 +13,8 @@ Finance](https://finance.yahoo.com/).
 
 ## Prerequisites ##
 
-`trading_grapher.py` has been tested on Debian Testing on WSL and requires the
-following packages:
+`trading_grapher.py` has been tested on Debian Testing on WSL 2 and requires
+the following packages:
 
   * [`mplfinance`](https://github.com/matplotlib/mplfinance) to plot trade data
     and the indicators based on historical data
