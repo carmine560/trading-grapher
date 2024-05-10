@@ -190,7 +190,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         # TODO: add completion
         'start_time': '${Market Data:opening_time}',
         'end_time': '${Market Data:closing_time}'}
-    config['EMA'] = {
+    config['EMA'] = {           # TODO: add periods
         'is_added': 'True'}
     config['MACD'] = {
         'is_added': 'True'}

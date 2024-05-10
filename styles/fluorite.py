@@ -1,6 +1,7 @@
 """Configure the style settings for mplfinance plots."""
 
-style = {'base_mpl_style': 'default',
+style = {'style_name': 'fluorite',
+         'base_mpl_style': 'default',
          'marketcolors': {'candle': {'up': 'mediumspringgreen',
                                      'down': 'hotpink'},
                           'edge': {'up': 'mediumspringgreen',
@@ -30,7 +31,7 @@ style = {'base_mpl_style': 'default',
                 'text.color': 'gainsboro',
                 'xtick.color': 'darkgray',
                 'ytick.color': 'darkgray'},
-         # The mplfinance._styledata module does not use the following
+         # The mplfinance/_styles.py module does not use the following
          # custom keys.
          'custom_style': {'neutral_color': 'gainsboro',
                           'profit_color': 'mediumspringgreen',

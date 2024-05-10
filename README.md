@@ -39,20 +39,20 @@ First, configure the path to your trading journal spreadsheet, the sheet name,
 and the directory path for storing historical data and charts:
 
 ``` shell
-python trading_grapher.py -G
+./trading_grapher.py -G
 ```
 
 Next, configure the columns of the trading journal:
 
 ``` shell
-python trading_grapher.py -J
+./trading_grapher.py -J
 ```
 
 The `~/.config/trading-grapher/trading_grapher.ini` configuration file stores
 the configurations above. Then:
 
 ``` shell
-python trading_grapher.py [%Y-%m-%d ...]
+./trading_grapher.py [%Y-%m-%d ...]
 ```
 
 ### Options ###
@@ -77,11 +77,11 @@ specify using the `-G` option.
 
 ### `ametrine` ###
 
-![Ametrine](examples/ametrine.png)
+<!-- ![Ametrine](examples/ametrine.png) -->
 
 ### `amber` ###
 
-![Amber](examples/amber.png)
+<!-- ![Amber](examples/amber.png) -->
 
 ## License ##
 
