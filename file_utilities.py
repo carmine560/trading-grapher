@@ -236,7 +236,7 @@ def select_executable(executables):
     return False
 
 
-def windows_to_wsl_path(path: str) -> str:
+def windows_to_wsl_path(path):
     """Convert a Windows path to a WSL path."""
     return subprocess.run(['wsl', 'wslpath', repr(path)],
                           capture_output=True, text=True).stdout.rstrip()

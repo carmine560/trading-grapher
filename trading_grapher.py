@@ -190,14 +190,24 @@ def configure(config_path, can_interpolate=True, can_override=True):
         # TODO: add completion
         'start_time': '${Market Data:opening_time}',
         'end_time': '${Market Data:closing_time}'}
-    config['EMA'] = {           # TODO: add periods
-        'is_added': 'True'}
+    config['EMA'] = {
+        'is_added': 'True',
+        'short_term_period': '5',
+        'medium_term_period': '25',
+        'long_term_period': '75'}
     config['MACD'] = {
-        'is_added': 'True'}
+        'is_added': 'True',
+        'short_term_period': '12',
+        'long_term_period': '26',
+        'signal_period': '9'}
     config['Stochastics'] = {
-        'is_added': 'True'}
+        'is_added': 'True',
+        'k_period': '5',
+        'd_period': '3',
+        'smooth_k_period': '3'}
     config['Volume'] = {
-        'is_added': 'True'}
+        'is_added': 'True',
+        'quantile_threshold': '0.99'}
     config['Minor X-ticks'] = {
         'is_added': 'True'}
     config['Tooltips'] = {
@@ -249,8 +259,7 @@ def save_market_data(config, trade_data, market_data_path):
         # time zone information.
         df.index = df.index.tz_localize('UTC').tz_convert(
             config['Market Data']['timezone'])
-        # TODO: configure q
-        q = df.volume.quantile(0.99)
+        q = df.volume.quantile(float(config['Volume']['quantile_threshold']))
         df['volume'] = df['volume'].mask(df['volume'] > q, q)
 
         previous = df[df.index < trade_data['entry_date']]
@@ -509,9 +518,9 @@ def prepare_marker_parameters(formalized, trade_data, result, style,
 
 def add_emas(config, formalized, mpf, addplot, style):
     """Add exponential moving average plots to the existing plots."""
-    ma_1 = ema(formalized.close, 5)
-    ma_2 = ema(formalized.close, 25)
-    ma_3 = ema(formalized.close, 75)
+    ma_1 = ema(formalized.close, int(config['EMA']['short_term_period']))
+    ma_2 = ema(formalized.close, int(config['EMA']['medium_term_period']))
+    ma_3 = ema(formalized.close, int(config['EMA']['long_term_period']))
 
     ma_addplot = [
         mpf.make_addplot(ma_1, color=style['mavcolors'][0], width=0.8),
@@ -523,13 +532,17 @@ def add_emas(config, formalized, mpf, addplot, style):
 def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
     """Add moving average convergence divergence plots to the given panel."""
     if ma == 'ema':
-        macd = ema(formalized.close, 12) - ema(formalized.close, 26)
+        macd = (
+            ema(formalized.close, int(config['MACD']['short_term_period']))
+            - ema(formalized.close, int(config['MACD']['long_term_period'])))
         ylabel = 'MACD'
     elif ma == 'tema':
-        macd = tema(formalized.close, 12) - tema(formalized.close, 26)
+        macd = (
+            tema(formalized.close, int(config['MACD']['short_term_period']))
+            - tema(formalized.close, int(config['MACD']['long_term_period'])))
         ylabel = 'MACD TEMA'
 
-    signal = macd.ewm(span=9).mean()
+    signal = macd.ewm(span=int(config['MACD']['signal_period'])).mean()
     histogram = macd - signal
     panel += 1
     macd_addplot = [
@@ -567,11 +580,10 @@ def tema(series, span):
 
 def add_stochastics(config, formalized, panel, mpf, addplot, style):
     """Add stochastic oscillator plots to the given panel."""
-    k = 5
-    d = 3
-    smooth_k = 3
-    df = stochastics(formalized.high, formalized.low, formalized.close, k=k,
-                     d=d, smooth_k=smooth_k)
+    df = stochastics(formalized.high, formalized.low, formalized.close,
+                     k=int(config['Stochastics']['k_period']),
+                     d=int(config['Stochastics']['d_period']),
+                     smooth_k=int(config['Stochastics']['smooth_k_period']))
     if df.k.dropna().empty:
         df.k.fillna(50.0, inplace=True)
     if df.d.dropna().empty:
