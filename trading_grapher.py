@@ -16,6 +16,7 @@ import pandas as pd
 
 import configuration
 import file_utilities
+import indicators
 
 ISO_DATE_FORMAT = '%Y-%m-%d'
 DATE_FORMAT = '%b %-d'
@@ -352,12 +353,12 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
 
     panel = 0
     if config['EMA'].getboolean('is_added'):
-        add_emas(config, formalized, mpf, addplot, style)
+        add_emas(config, formalized, addplot, style)
     if config['MACD'].getboolean('is_added'):
-        panel = add_macd(config, formalized, panel, mpf, addplot, style)
+        panel = add_macd(config, formalized, panel, addplot, style)
     if config['Stochastics'].getboolean('is_added'):
-        panel = stoch_panel = add_stochastics(config, formalized, panel, mpf,
-                                              addplot, style)
+        panel = stochastics_panel = add_stochastics(config, formalized, panel,
+                                                    addplot, style)
     if config['Volume'].getboolean('is_added'):
         panel += 1
 
@@ -391,7 +392,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         add_minor_xticks(axlist, style['custom_style']['minor_grid_alpha'])
 
     if config['Stochastics'].getboolean('is_added'):
-        axlist[2 * stoch_panel].set_yticks([20.0, 50.0, 80.0])
+        axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
 
     if (config['Tooltips'].getboolean('is_added')
         and closing_opening_entry_exit_prices[0]
@@ -452,15 +453,6 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         f"-{trade_data['symbol']}.png"))
 
 
-def create_timestamp(date, time):
-    """Create a pandas Timestamp by adding a time duration to a date."""
-    if pd.isna(date):
-        return pd.NaT
-    else:
-        return date + (pd.Timedelta(time)
-                       if isinstance(time, str) else pd.Timedelta(str(time)))
-
-
 def prepare_marker_parameters(formalized, trade_data, result, style,
                               timestamps, addplot,
                               close_open_entry_exit_prices,
@@ -513,36 +505,54 @@ def prepare_marker_parameters(formalized, trade_data, result, style,
                 style['custom_style']['loss_color'])
 
 
-def add_emas(config, formalized, mpf, addplot, style):
+def create_timestamp(date, time):
+    """Create a pandas Timestamp by adding a time duration to a date."""
+    if pd.isna(date):
+        return pd.NaT
+    else:
+        return date + (pd.Timedelta(time)
+                       if isinstance(time, str) else pd.Timedelta(str(time)))
+
+
+def add_emas(config, formalized, addplot, style):
     """Add exponential moving average plots to the existing plots."""
-    ma_1 = ema(formalized.close, int(config['EMA']['short_term_period']))
-    ma_2 = ema(formalized.close, int(config['EMA']['medium_term_period']))
-    ma_3 = ema(formalized.close, int(config['EMA']['long_term_period']))
+    addplot.extend([
+        mpf.make_addplot(
+            indicators.ema(formalized.close,
+                           int(config['EMA']['short_term_period'])),
+            color=style['mavcolors'][0], width=0.8),
+        mpf.make_addplot(
+            indicators.ema(formalized.close,
+                           int(config['EMA']['medium_term_period'])),
+            color=style['mavcolors'][1], width=0.8),
+        mpf.make_addplot(
+            indicators.ema(formalized.close,
+                           int(config['EMA']['long_term_period'])),
+            color=style['mavcolors'][2], width=0.8)])
 
-    ma_addplot = [
-        mpf.make_addplot(ma_1, color=style['mavcolors'][0], width=0.8),
-        mpf.make_addplot(ma_2, color=style['mavcolors'][1], width=0.8),
-        mpf.make_addplot(ma_3, color=style['mavcolors'][2], width=0.8)]
-    addplot.extend(ma_addplot)
 
-
-def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
+def add_macd(config, formalized, panel, addplot, style, ma='ema'):
     """Add moving average convergence divergence plots to the given panel."""
     if ma == 'ema':
         macd = (
-            ema(formalized.close, int(config['MACD']['short_term_period']))
-            - ema(formalized.close, int(config['MACD']['long_term_period'])))
+            indicators.ema(formalized.close,
+                           int(config['MACD']['short_term_period']))
+            - indicators.ema(formalized.close,
+                             int(config['MACD']['long_term_period'])))
         ylabel = 'MACD'
     elif ma == 'tema':
         macd = (
-            tema(formalized.close, int(config['MACD']['short_term_period']))
-            - tema(formalized.close, int(config['MACD']['long_term_period'])))
+            indicators.tema(formalized.close,
+                            int(config['MACD']['short_term_period']))
+            - indicators.tema(formalized.close,
+                              int(config['MACD']['long_term_period'])))
         ylabel = 'MACD TEMA'
 
     signal = macd.ewm(span=int(config['MACD']['signal_period'])).mean()
     histogram = macd - signal
     panel += 1
-    macd_addplot = [
+
+    addplot.extend([
         mpf.make_addplot(macd, color=style['mavcolors'][0], panel=panel,
                          width=0.8, ylabel=ylabel),
         mpf.make_addplot(signal, color=style['mavcolors'][1], panel=panel,
@@ -552,35 +562,18 @@ def add_macd(config, formalized, panel, mpf, addplot, style, ma='ema'):
                                 else style['mavcolors'][3]
                                 for value in histogram],
                          panel=panel, secondary_y=False, type='bar',
-                         width=1.0)]
-    addplot.extend(macd_addplot)
+                         width=1.0)])
 
     return panel
 
 
-def ema(series, span):
-    """Calculate the exponential moving average of a series."""
-    ema = series.ewm(span=span).mean()
-    ema.iloc[:span - 1] = np.nan
-    return ema
-
-
-def tema(series, span):
-    """Calculate the triple exponential moving average of a series."""
-    ema_1 = ema(series, span)
-    ema_2 = ema(ema_1, span)
-    ema_3 = ema(ema_2, span)
-    tema = 3 * (ema_1 - ema_2) + ema_3
-    tema.iloc[:3 * (span - 1)] = np.nan
-    return tema
-
-
-def add_stochastics(config, formalized, panel, mpf, addplot, style):
+def add_stochastics(config, formalized, panel, addplot, style):
     """Add stochastic oscillator plots to the given panel."""
-    df = stochastics(formalized.high, formalized.low, formalized.close,
-                     k=int(config['Stochastics']['k_period']),
-                     d=int(config['Stochastics']['d_period']),
-                     smooth_k=int(config['Stochastics']['smooth_k_period']))
+    df = indicators.stochastics(
+        formalized.high, formalized.low, formalized.close,
+        k=int(config['Stochastics']['k_period']),
+        d=int(config['Stochastics']['d_period']),
+        smooth_k=int(config['Stochastics']['smooth_k_period']))
     if df.k.dropna().empty:
         df.k.fillna(50.0, inplace=True)
     if df.d.dropna().empty:
@@ -590,33 +583,14 @@ def add_stochastics(config, formalized, panel, mpf, addplot, style):
     formalized['d'] = pd.Series(dtype='float')
     formalized.update(df)
     panel += 1
-    stoch_addplot = [mpf.make_addplot(formalized.k,
-                                      color=style['mavcolors'][0], panel=panel,
-                                      width=0.8, ylabel='Stochastics'),
-                     mpf.make_addplot(formalized.d,
-                                      color=style['mavcolors'][1], panel=panel,
-                                      secondary_y=False, width=0.8)]
-    addplot.extend(stoch_addplot)
+
+    addplot.extend([
+        mpf.make_addplot(formalized.k, color=style['mavcolors'][0],
+                         panel=panel, width=0.8, ylabel='Stochastics'),
+        mpf.make_addplot(formalized.d, color=style['mavcolors'][1],
+                         panel=panel, secondary_y=False, width=0.8)])
 
     return panel
-
-
-def stochastics(high, low, close, k, d, smooth_k):
-    """Calculate the stochastic oscillator values for a given dataset."""
-    lowest_low = low.rolling(k).min()
-    highest_high = high.rolling(k).max()
-
-    stochastics = 100 * (close - lowest_low)
-    diff = highest_high - lowest_low
-    if diff.eq(0).any().any():
-        diff += sys.float_info.epsilon
-
-    stochastics /= diff
-
-    stochastics_k = stochastics.rolling(smooth_k).mean()
-    stochastics_d = stochastics_k.rolling(d).mean()
-
-    return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
 
 
 def add_minor_xticks(axlist, minor_grid_alpha):
