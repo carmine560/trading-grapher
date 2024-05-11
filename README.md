@@ -60,7 +60,7 @@ the configurations above. Then:
   * `-f FILE`: specify the file path to the trading journal spreadsheet
   * `-d DIRECTORY`: specify the directory path for storing historical data and
     charts
-  * `-B [DIRECTORY]`: generate a Bash script for running trading_grapher.py
+  * `-B [DIRECTORY]`: generate a Bash script for running `trading_grapher.py`
     with an optional output directory
   * `-G`: configure general options and exit
   * `-J`: configure the columns of the trading journal and exit

@@ -29,6 +29,9 @@ def main():
     config_path = file_utilities.get_config_path(__file__)
     backup_parameters = {'number_of_backups': 8}
 
+    if args.B:
+        file_utilities.create_bash_wrapper(__file__, args.B)
+        return
     if any((args.G, args.J)):
         config = configure(config_path, can_interpolate=False)
         if args.G and configuration.modify_section(
@@ -47,10 +50,6 @@ def main():
         return
     else:
         config = configure(config_path)
-
-    if args.B:
-        file_utilities.create_bash_wrapper(__file__, args.B)
-        return
 
     trading_path = args.f[0] if args.f else config['General']['trading_path']
     charts_directory = (args.d[0] if args.d
@@ -116,7 +115,7 @@ def get_arguments():
     parser.add_argument(
         'dates', nargs='*',
         default=[pd.Timestamp.now().strftime(ISO_DATE_FORMAT)],
-        help='specify dates in the format %%Y-%%m-%%d')
+        help='specify dates in the format %%Y-%%m-%%d [default: today]')
     parser.add_argument(
         '-f', nargs=1,
         help='specify the file path to the trading journal spreadsheet',
