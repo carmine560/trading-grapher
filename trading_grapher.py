@@ -78,20 +78,17 @@ def main():
         if not trades.empty:
             first_index = next(trades.iterrows())[0]
             for index, trade in trades.iterrows():
-                trade_data = {}
-                for column in trading_journal_columns:
-                    trade_data[column] = trade.get(
-                        config['Trading Journal'][column])
+                trade_data = {
+                    column: trade.get(config['Trading Journal'][column])
+                    for column in trading_journal_columns}
 
                 if not trade_data['optional_number']:
                     trade_data['optional_number'] = index - first_index + 1
 
-                trade_data['entry_date'] = (
-                    trade_data['entry_date'].tz_localize(
-                        config['Market Data']['timezone']))
-                trade_data['exit_date'] = (
-                    trade_data['exit_date'].tz_localize(
-                        config['Market Data']['timezone']))
+                for d in ['entry_date', 'exit_date']:
+                    trade_data[d] = trade_data[d].tz_localize(
+                        config['Market Data']['timezone'])
+
                 market_data_path = os.path.join(
                     charts_directory,
                     f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
@@ -307,9 +304,6 @@ def save_market_data(config, trade_data, market_data_path):
 
 def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     """Plot trading charts with entry and exit points, and indicators."""
-    def create_timestamp(date, time): # TODO: add isna()
-        return date + pd.Timedelta(time) if time else None
-
     try:
         formalized = pd.read_csv(market_data_path, index_col=0,
                                  parse_dates=True)
@@ -352,7 +346,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                               timestamps, addplot,
                               closing_opening_entry_exit_prices,
                               closing_opening_entry_exit_colors)
-    if None in closing_opening_entry_exit_prices: # TODO
+    if None in closing_opening_entry_exit_prices:
         print('Key trading prices are incomplete.')
         return
 
@@ -437,14 +431,10 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                      formalized=formalized, timestamp=timestamps['exit'])
 
     if config['Text'].getboolean('is_added'):
-        notes = []
-        for index in range(1, 11):
-            note_column = trade_data[f'optional_note_{index}']
-            if note_column:
-                notes.append(note_column)
-
         tactic = file_utilities.create_acronym(trade_data['optional_tactic'])
         full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
+        notes = [trade_data[f'optional_note_{i}'] for i in range(1, 11)
+                 if trade_data[f'optional_note_{i}']]
         add_text(axlist,
                  f"Trade {trade_data['optional_number']}"
                  f" for {trade_data['symbol']}"
@@ -460,6 +450,15 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
         f"-{int(trade_data['optional_number']):02}"
         f"-{trade_data['symbol']}.png"))
+
+
+def create_timestamp(date, time):
+    """Create a pandas Timestamp by adding a time duration to a date."""
+    if pd.isna(date):
+        return pd.NaT
+    else:
+        return date + (pd.Timedelta(time)
+                       if isinstance(time, str) else pd.Timedelta(str(time)))
 
 
 def prepare_marker_parameters(formalized, trade_data, result, style,
@@ -479,9 +478,8 @@ def prepare_marker_parameters(formalized, trade_data, result, style,
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
         formalized['entry_point'] = pd.Series(dtype='float')
-        timestamps['entry'] = (
-            trade_data['entry_date']
-            + pd.Timedelta(str(trade_data['entry_time'])))
+        timestamps['entry'] = create_timestamp(trade_data['entry_date'],
+                                               trade_data['entry_time'])
         formalized.loc[timestamps['entry'], 'entry_point'] = (
             trade_data['entry_price'])
         addplot.append(mpf.make_addplot(
@@ -496,9 +494,8 @@ def prepare_marker_parameters(formalized, trade_data, result, style,
     if (not pd.isna(trade_data['exit_time'])
         and not pd.isna(trade_data['exit_price'])):
         formalized['exit_point'] = pd.Series(dtype='float')
-        timestamps['exit'] = (
-            trade_data['exit_date']
-            + pd.Timedelta(str(trade_data['exit_time'])))
+        timestamps['exit'] = create_timestamp(trade_data['exit_date'],
+                                              trade_data['exit_time'])
         formalized.loc[timestamps['exit'], 'exit_point'] = (
             trade_data['exit_price'])
         addplot.append(mpf.make_addplot(
