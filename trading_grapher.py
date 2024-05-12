@@ -127,10 +127,8 @@ def get_arguments():
         metavar='DIRECTORY')
     group.add_argument(
         '-B', nargs='?', const='.',
-        help='generate a Bash script'
-        f' for operating {os.path.basename(__file__)}'
-        ' with an optional output directory',
-        metavar='DIRECTORY')
+        help='generate a Bash script to activate and run this script',
+        metavar='OUTPUT_DIRECTORY')
     group.add_argument(
         '-G', action='store_true',
         help='configure general options and exit')
