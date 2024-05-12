@@ -235,12 +235,12 @@ def save_market_data(config, trade_data, market_data_path):
                                      unit='s')
 
     if (PERIOD_IN_DAYS <= 1 + delta.days
-        or last + pd.Timedelta(minutes=30) < modified_time
+        or last + pd.Timedelta(minutes=30) < modified_time # TODO: configure
         or pd.Timestamp.now(tz=config['Market Data']['timezone'])
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        my_share = share.Share(f"{trade_data['symbol']}.T")
+        my_share = share.Share(f"{trade_data['symbol']}.T") # TODO: configure
         try:
             symbol_data = my_share.get_historical(
                 share.PERIOD_TYPE_DAY, PERIOD_IN_DAYS,
