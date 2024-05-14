@@ -335,7 +335,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         timestamps['end'] = min(formalized.tail(1).index[0], timestamps['end'])
 
     addplot = []
-    closing_opening_entry_exit_prices = [None, None, None, None]
+    closing_opening_entry_exit_prices = [0.0, 0.0, 0.0, 0.0]
     closing_opening_entry_exit_colors = [
         style['rc']['axes.edgecolor'], style['rc']['axes.edgecolor'],
         style['custom_style']['neutral_color'],
@@ -345,9 +345,6 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                               timestamps, addplot,
                               closing_opening_entry_exit_prices,
                               closing_opening_entry_exit_colors)
-    if None in closing_opening_entry_exit_prices:
-        print('Key trading prices are incomplete.')
-        return
 
     panel = 0
     if config['EMA'].getboolean('is_added'):
