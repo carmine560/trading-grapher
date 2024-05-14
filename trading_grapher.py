@@ -319,34 +319,14 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                   if trade_data['trade_type'].lower() == 'short'
                   else 0)
 
+    addplot = []
+    panel = 0
+    timestamps, prices, colors = prepare_parameters(config, formalized,
+                                                    trade_data, result, style)
     percentage_change = (100 * result / trade_data['entry_price']
                          if pd.isna(trade_data['optional_percentage_change'])
                          else trade_data['optional_percentage_change'])
 
-    timestamps = {
-        'start': create_timestamp(
-            trade_data['entry_date'],
-            config['Active Trading Hours']['start_time']),
-        'end': create_timestamp(
-            trade_data['entry_date'],
-            config['Active Trading Hours']['end_time']),
-        'entry': None, 'exit': None}
-    if isinstance(timestamps['end'], pd.Timestamp):
-        timestamps['end'] = min(formalized.tail(1).index[0], timestamps['end'])
-
-    addplot = []
-    closing_opening_entry_exit_prices = [0.0, 0.0, 0.0, 0.0]
-    closing_opening_entry_exit_colors = [
-        style['rc']['axes.edgecolor'], style['rc']['axes.edgecolor'],
-        style['custom_style']['neutral_color'],
-        style['custom_style']['neutral_color']]
-
-    prepare_marker_parameters(formalized, trade_data, result, style,
-                              timestamps, addplot,
-                              closing_opening_entry_exit_prices,
-                              closing_opening_entry_exit_colors)
-
-    panel = 0
     if config['EMA'].getboolean('is_added'):
         add_emas(config, formalized, addplot, style)
     if config['MACD'].getboolean('is_added'):
@@ -362,12 +342,10 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
         figsize=(1152 / 100, 648 / 100),
         fill_between=dict(alpha=style['custom_style']['filled_area_alpha'],
-                          color=closing_opening_entry_exit_colors[3],
-                          y1=trade_data['entry_price'],
+                          color=colors['exit'], y1=trade_data['entry_price'],
                           y2=trade_data['exit_price'], zorder=1),
         hlines=dict(alpha=style['custom_style']['line_alpha'],
-                    colors=closing_opening_entry_exit_colors,
-                    hlines=closing_opening_entry_exit_prices,
+                    colors=list(colors.values()), hlines=list(prices.values()),
                     linestyle=[style['custom_style']['closing_line'],
                                style['custom_style']['opening_line'],
                                style['custom_style']['entry_line'],
@@ -379,8 +357,8 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
 
     add_vertical_elements(
-        formalized, timestamps, axlist, closing_opening_entry_exit_colors,
-        style, config['Active Trading Hours'].getboolean('is_added'))
+        formalized, timestamps, axlist, colors, style,
+        config['Active Trading Hours'].getboolean('is_added'))
 
     axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 30))
     if config['Minor X-ticks'].getboolean('is_added'):
@@ -389,19 +367,14 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     if config['Stochastics'].getboolean('is_added'):
         axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
 
-    if (config['Tooltips'].getboolean('is_added')
-        and closing_opening_entry_exit_prices[0]
-        and closing_opening_entry_exit_prices[1] != trade_data['entry_price']
-        and closing_opening_entry_exit_prices[1] != trade_data['exit_price']):
-        delta = (closing_opening_entry_exit_prices[1]
-                 - closing_opening_entry_exit_prices[0])
-        add_tooltips(
-            config, axlist, closing_opening_entry_exit_prices[1],
-            f'{delta:.1f},'
-            f' {100 * delta / closing_opening_entry_exit_prices[0]:.2f}%',
-            style['custom_style']['tooltip_color'],
-            closing_opening_entry_exit_colors[1],
-            style['custom_style']['tooltip_bbox_alpha'])
+    if (config['Tooltips'].getboolean('is_added') and prices['closing']
+        and prices['opening'] != trade_data['entry_price']
+        and prices['opening'] != trade_data['exit_price']):
+        delta = prices['opening'] - prices['closing']
+        add_tooltips(config, axlist, prices['opening'],
+                     f"{delta:.1f}, {100 * delta / prices['closing']:.2f}%",
+                     style['custom_style']['tooltip_color'], colors['opening'],
+                     style['custom_style']['tooltip_bbox_alpha'])
 
     if (config['Tooltips'].getboolean('is_added')
         and not pd.isna(trade_data['entry_price'])):
@@ -409,8 +382,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
             trade_data['optional_entry_reason'])
         add_tooltips(config, axlist, trade_data['entry_price'],
                      f'{acronym}' if acronym else '',
-                     style['custom_style']['tooltip_color'],
-                     closing_opening_entry_exit_colors[2],
+                     style['custom_style']['tooltip_color'], colors['entry'],
                      style['custom_style']['tooltip_bbox_alpha'],
                      formalized=formalized, timestamp=timestamps['entry'])
 
@@ -421,8 +393,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         add_tooltips(config, axlist, trade_data['exit_price'],
                      f"{f'{acronym}, ' if acronym else ''}"
                      f"{result:.1f}, {percentage_change:.2f}%",
-                     style['custom_style']['tooltip_color'],
-                     closing_opening_entry_exit_colors[3],
+                     style['custom_style']['tooltip_color'], colors['exit'],
                      style['custom_style']['tooltip_bbox_alpha'],
                      formalized=formalized, timestamp=timestamps['exit'])
 
@@ -448,56 +419,50 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         f"-{trade_data['symbol']}.png"))
 
 
-def prepare_marker_parameters(formalized, trade_data, result, style,
-                              timestamps, addplot,
-                              close_open_entry_exit_prices,
-                              close_open_entry_exit_colors):
-    """Prepare entry and exit marker parameters for plotting charts."""
+def prepare_parameters(config, formalized, trade_data, result, style):
+    """Prepare timestamps, prices, and colors for entry and exit points."""
+    timestamps = {
+        'start': create_timestamp(
+            trade_data['entry_date'],
+            config['Active Trading Hours']['start_time']),
+        'end': create_timestamp(
+            trade_data['entry_date'],
+            config['Active Trading Hours']['end_time']),
+        'entry': None, 'exit': None}
+    if isinstance(timestamps['end'], pd.Timestamp):
+        timestamps['end'] = min(formalized.tail(1).index[0], timestamps['end'])
+
+    prices = {'closing': 0.0, 'opening': 0.0, 'entry': 0.0, 'exit': 0.0}
+    colors = {'closing': style['rc']['axes.edgecolor'],
+              'opening': style['rc']['axes.edgecolor'],
+              'entry': style['custom_style']['neutral_color'],
+              'exit': style['custom_style']['neutral_color']}
+
     previous = formalized[formalized.index < trade_data['entry_date']]
     current = formalized[trade_data['entry_date'] <= formalized.index]
 
     if previous.notnull().values.any():
-        close_open_entry_exit_prices[0] = (
-            previous.dropna().tail(1).close.iloc[0])
-        close_open_entry_exit_prices[1] = current.dropna().head(1).open.iloc[0]
+        prices['closing'] = previous.dropna().tail(1).close.iloc[0]
+        prices['opening'] = current.dropna().head(1).open.iloc[0]
 
     # nan is not recognized as False in a boolean context.
     if (not pd.isna(trade_data['entry_time'])
         and not pd.isna(trade_data['entry_price'])):
-        formalized['entry_point'] = pd.Series(dtype='float')
         timestamps['entry'] = create_timestamp(trade_data['entry_date'],
                                                trade_data['entry_time'])
-        formalized.loc[timestamps['entry'], 'entry_point'] = (
-            trade_data['entry_price'])
-        addplot.append(mpf.make_addplot(
-            formalized.entry_point,
-            alpha=style['custom_style']['marker_alpha'],
-            color=close_open_entry_exit_colors[2], edgecolors='none',
-            marker=style['custom_style'].get(
-                f"{trade_data['trade_type'].lower()}_marker"),
-            markersize=100, type='scatter'))
-        close_open_entry_exit_prices[2] = trade_data['entry_price']
+        prices['entry'] = trade_data['entry_price']
 
     if (not pd.isna(trade_data['exit_time'])
         and not pd.isna(trade_data['exit_price'])):
-        formalized['exit_point'] = pd.Series(dtype='float')
         timestamps['exit'] = create_timestamp(trade_data['exit_date'],
                                               trade_data['exit_time'])
-        formalized.loc[timestamps['exit'], 'exit_point'] = (
-            trade_data['exit_price'])
-        addplot.append(mpf.make_addplot(
-            formalized.exit_point, alpha=style['custom_style']['marker_alpha'],
-            color=close_open_entry_exit_colors[3], edgecolors='none',
-            marker=style['custom_style'].get(
-                f"{trade_data['trade_type'].lower()}_marker"),
-            markersize=100, type='scatter'))
-        close_open_entry_exit_prices[3] = trade_data['exit_price']
+        prices['exit'] = trade_data['exit_price']
         if result > 0:
-            close_open_entry_exit_colors[3] = (
-                style['custom_style']['profit_color'])
+            colors['exit'] = style['custom_style']['profit_color']
         elif result < 0:
-            close_open_entry_exit_colors[3] = (
-                style['custom_style']['loss_color'])
+            colors['exit'] = style['custom_style']['loss_color']
+
+    return (timestamps, prices, colors)
 
 
 def create_timestamp(date, time):
@@ -596,8 +561,7 @@ def add_minor_xticks(axlist, minor_grid_alpha):
             axlist[index].grid(which='minor', alpha=minor_grid_alpha)
 
 
-def add_vertical_elements(formalized, timestamps, axlist,
-                          close_open_entry_exit_colors, style,
+def add_vertical_elements(formalized, timestamps, axlist, colors, style,
                           is_active_trading_hours_added):
     """Add vertical elements between panels at the specified timestamps."""
     for index, _ in enumerate(axlist):
@@ -612,21 +576,18 @@ def add_vertical_elements(formalized, timestamps, axlist,
                     formalized.index.get_loc(timestamps['start']),
                     formalized.index.get_loc(timestamps['end']),
                     facecolor=style['custom_style'][
-                        'active_trading_hours_color'],
-                    zorder=0)
+                        'active_trading_hours_color'], zorder=0)
             if timestamps['entry']:
                 axlist[index].axvline(
                     alpha=style['custom_style']['line_alpha'],
-                    color=close_open_entry_exit_colors[2],
-                    linestyle=style['custom_style']['entry_line'],
-                    linewidth=1,
+                    color=colors['entry'],
+                    linestyle=style['custom_style']['entry_line'], linewidth=1,
                     x=formalized.index.get_loc(timestamps['entry']))
             if timestamps['exit']:
                 axlist[index].axvline(
                     alpha=style['custom_style']['line_alpha'],
-                    color=close_open_entry_exit_colors[3],
-                    linestyle=style['custom_style']['exit_line'],
-                    linewidth=1,
+                    color=colors['exit'],
+                    linestyle=style['custom_style']['exit_line'], linewidth=1,
                     x=formalized.index.get_loc(timestamps['exit']))
 
 
