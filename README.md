@@ -73,15 +73,18 @@ specify using the `-G` option.
 
 ### `fluorite` ###
 
-![Fluorite](examples/fluorite.png)
+![A ‘fluorite’ style chart showing the result of a specific stock day
+trade](examples/fluorite.png)
 
 ### `ametrine` ###
 
-<!-- ![Ametrine](examples/ametrine.png) -->
+<!-- ![A ‘ametrine’ style chart showing the result of a specific stock day
+trade](examples/ametrine.png) -->
 
 ### `amber` ###
 
-<!-- ![Amber](examples/amber.png) -->
+<!-- ![A ‘amber’ style chart showing the result of a specific stock day
+trade](examples/amber.png) -->
 
 ## License ##
 
