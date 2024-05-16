@@ -160,8 +160,12 @@ def configure(config_path, can_interpolate=True, can_override=True):
                                          'Documents/Trading')}
     config['Market Data'] = {
         'opening_time': '09:00:00',
+        'morning_session_end': '11:30:00',
+        'afternoon_session_start': '12:30:00',
         'closing_time': '15:30:00',
-        'timezone': 'Asia/Tokyo'}
+        'delay': '20',
+        'timezone': 'Asia/Tokyo',
+        'exchange_suffix': '.T'}
 
     config['Trading Journal'] = { # TODO: add completion
         'optional_number': 'Number',
@@ -181,6 +185,13 @@ def configure(config_path, can_interpolate=True, can_override=True):
     for index in range(1, 11):
         config['Trading Journal'][f'optional_note_{index}'] = f'Note {index}'
 
+    config['Chart'] = {
+        'width': '1280',
+        'height': '720',
+        'scale_padding_top': '0.0',
+        'scale_padding_right': '0.02',
+        'scale_padding_bottom': '1.3',
+        'scale_padding_left': '0.8'}
     config['Active Trading Hours'] = {
         'is_added': 'True',
         # TODO: add completion
@@ -209,7 +220,8 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Tooltips'] = {
         'is_added': 'True'}
     config['Text'] = {
-        'is_added': 'True'}
+        'is_added': 'True',
+        'default_y_offset_ratio': '-0.008'}
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -225,7 +237,7 @@ def save_market_data(config, trade_data, market_data_path):
         - trade_data['entry_date'])
     last = modified_time = pd.Timestamp(0,
                                         tz=config['Market Data']['timezone'])
-    if os.path.exists(market_data_path):
+    if os.path.isfile(market_data_path):
         formalized = pd.read_csv(market_data_path, index_col=0,
                                  parse_dates=True)
         last = formalized.tail(1).index[0]
@@ -234,12 +246,14 @@ def save_market_data(config, trade_data, market_data_path):
                                      unit='s')
 
     if (PERIOD_IN_DAYS <= 1 + delta.days
-        or last + pd.Timedelta(minutes=30) < modified_time # TODO: configure
+        or last + pd.Timedelta(minutes=int(config['Market Data']['delay']))
+        < modified_time
         or pd.Timestamp.now(tz=config['Market Data']['timezone'])
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        my_share = share.Share(f"{trade_data['symbol']}.T") # TODO: configure
+        my_share = share.Share(f"{trade_data['symbol']}"
+                               f"{config['Market Data']['exchange_suffix']}")
         try:
             symbol_data = my_share.get_historical(
                 share.PERIOD_TYPE_DAY, PERIOD_IN_DAYS,
@@ -267,13 +281,21 @@ def save_market_data(config, trade_data, market_data_path):
 
         morning = (pd.Timedelta(str(trade_data['exit_time']))
                    < pd.Timedelta(hours=12))
-        # TODO: extend trading hours
+
         if morning and not previous.empty:
-            start = previous_date + pd.Timedelta(hours=12, minutes=30)
-            end = trade_data['entry_date'] + pd.Timedelta(hours=11, minutes=29)
+            start = create_timestamp(
+                previous_date,
+                config['Market Data']['afternoon_session_start'])
+            end = create_timestamp(
+                trade_data['entry_date'],
+                config['Market Data']['morning_session_end'])
+            end -= pd.Timedelta(minutes=1)
         else:
-            start = trade_data['entry_date'] + pd.Timedelta(hours=9)
-            end = trade_data['entry_date'] + pd.Timedelta(hours=14, minutes=59)
+            start = create_timestamp(trade_data['entry_date'],
+                                     config['Market Data']['opening_time'])
+            end = create_timestamp(trade_data['entry_date'],
+                                   config['Market Data']['closing_time'])
+            end -= pd.Timedelta(minutes=1)
 
         formalized = pd.DataFrame(columns=('open', 'high', 'low', 'close',
                                            'volume'),
@@ -283,12 +305,23 @@ def save_market_data(config, trade_data, market_data_path):
         formalized.update(df)
 
         if morning and not previous.empty:
-            start = previous_date + pd.Timedelta(hours=15)
-            end = trade_data['entry_date'] + pd.Timedelta(hours=8, minutes=59)
+            start = create_timestamp(previous_date,
+                                     config['Market Data']['closing_time'])
+            end = create_timestamp(trade_data['entry_date'],
+                                   config['Market Data']['opening_time'])
+            end -= pd.Timedelta(minutes=1)
             exclusion = pd.date_range(start=start, end=end, freq='min')
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
         else:
-            formalized = formalized.between_time('12:30:00', '11:29:00')
+            start = create_timestamp(
+                trade_data['entry_date'],
+                config['Market Data']['morning_session_end'])
+            end = create_timestamp(
+                trade_data['entry_date'],
+                config['Market Data']['afternoon_session_start'])
+            end -= pd.Timedelta(minutes=1)
+            exclusion = pd.date_range(start=start, end=end, freq='min')
+            formalized = formalized.loc[~formalized.index.isin(exclusion)]
 
         if formalized.isna().values.all():
             print('Values are missing.')
@@ -340,7 +373,8 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     fig, axlist = mpf.plot(
         formalized, addplot=addplot, closefig=True,
         datetime_format=f'{DATE_FORMAT}, {TIME_FORMAT}',
-        figsize=(1152 / 100, 648 / 100),
+        figsize=(int(config['Chart']['width']) / 100,
+                 int(config['Chart']['height']) / 100),
         fill_between=dict(alpha=style['custom_style']['filled_area_alpha'],
                           color=colors['exit'], y1=trade_data['entry_price'],
                           y2=trade_data['exit_price'], zorder=1),
@@ -351,7 +385,12 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                                style['custom_style']['entry_line'],
                                style['custom_style']['exit_line']],
                     linewidths=1),
-        returnfig=True, scale_padding={'top': 0, 'right': 0.05, 'bottom': 1.4},
+        returnfig=True,
+        scale_padding={
+            'top': float(config['Chart']['scale_padding_top']),
+            'right': float(config['Chart']['scale_padding_right']),
+            'bottom': float(config['Chart']['scale_padding_bottom']),
+            'left': float(config['Chart']['scale_padding_left'])},
         scale_width_adjustment=dict(candle=1.5), style=style,
         tight_layout=True, type='candle',
         volume=config['Volume'].getboolean('is_added'), volume_panel=panel)
@@ -371,7 +410,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         and prices['opening'] != trade_data['entry_price']
         and prices['opening'] != trade_data['exit_price']):
         delta = prices['opening'] - prices['closing']
-        add_tooltips(config, axlist, prices['opening'],
+        add_tooltips(axlist, prices['opening'],
                      f"{delta:.1f}, {100 * delta / prices['closing']:.2f}%",
                      style['custom_style']['tooltip_color'], colors['opening'],
                      style['custom_style']['tooltip_bbox_alpha'])
@@ -380,7 +419,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         and not pd.isna(trade_data['entry_price'])):
         acronym = file_utilities.create_acronym(
             trade_data['optional_entry_reason'])
-        add_tooltips(config, axlist, trade_data['entry_price'],
+        add_tooltips(axlist, trade_data['entry_price'],
                      f'{acronym}' if acronym else '',
                      style['custom_style']['tooltip_color'], colors['entry'],
                      style['custom_style']['tooltip_bbox_alpha'],
@@ -390,7 +429,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         and not pd.isna(trade_data['exit_price'])):
         acronym = file_utilities.create_acronym(
             trade_data['optional_exit_reason'])
-        add_tooltips(config, axlist, trade_data['exit_price'],
+        add_tooltips(axlist, trade_data['exit_price'],
                      f"{f'{acronym}, ' if acronym else ''}"
                      f"{result:.1f}, {percentage_change:.2f}%",
                      style['custom_style']['tooltip_color'], colors['exit'],
@@ -402,7 +441,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
         notes = [trade_data[f'optional_note_{i}'] for i in range(1, 11)
                  if trade_data[f'optional_note_{i}']]
-        add_text(axlist,
+        add_text(axlist, float(config['Text']['default_y_offset_ratio']),
                  f"Trade {trade_data['optional_number']}"
                  f" for {trade_data['symbol']}"
                  f" using {trade_data['trade_type'].title()}"
@@ -591,33 +630,28 @@ def add_vertical_elements(formalized, timestamps, axlist, colors, style,
                     x=formalized.index.get_loc(timestamps['exit']))
 
 
-def add_tooltips(config, axlist, price, string, color, bbox_color, bbox_alpha,
+def add_tooltips(axlist, price, string, color, bbox_color, bbox_alpha,
                  formalized=None, timestamp=None):
     """Add tooltips to the specified axes."""
-    # Calculate x_offset and y_offset_ratios using points_to_pixels()
-    # and transform(). The values are currently obtained heuristically.
-    x_offset = -1.2
-    axlist[0].text(x_offset, price, string, c=color, ha='right', size='small',
+    axlist[0].text(0, price, string, c=color, ha='right', size='small',
                    va='center',
                    bbox=dict(alpha=bbox_alpha, boxstyle='round, pad=0.2',
                              ec='none', fc=bbox_color))
 
     if timestamp:
         last_primary_axes = len(axlist) - 2
-        bottom, top = axlist[last_primary_axes].get_ylim()
-        y_offset_ratios = {0: -0.006, 2: -0.02, 4: -0.025, 6: -0.03}
-        y_offset_ratio = y_offset_ratios.get(last_primary_axes)
+        bottom, _ = axlist[last_primary_axes].get_ylim()
 
         axlist[last_primary_axes].text(
-            formalized.index.get_loc(timestamp),
-            bottom + y_offset_ratio * (top - bottom),
+            formalized.index.get_loc(timestamp), bottom,
             timestamp.strftime(TIME_FORMAT), c=color, ha='center',
             size='small', va='top',
             bbox=dict(alpha=bbox_alpha, boxstyle='round, pad=0.2', ec='none',
                       fc=bbox_color))
 
 
-def add_text(axlist, title, note_series, bbox_color, bbox_alpha):
+def add_text(axlist, default_y_offset_ratio, title, note_series, bbox_color,
+             bbox_alpha):
     """Add a title and notes to the last primary axes."""
     # Use the last panel to prevent other panels from overwriting the
     # text.
@@ -625,17 +659,13 @@ def add_text(axlist, title, note_series, bbox_color, bbox_alpha):
     bottom, top = axlist[last_primary_axes].get_ylim()
     height = top - bottom
 
-    # Calculate x_offset and y_offset_ratios using points_to_pixels()
-    # and transform(). The values are currently obtained heuristically.
-    # Additionally, modify panel_offset_factors if panel_ratios is
-    # specified.
-    x_offset = 1.2
-    default_panel_offset_factor = (last_primary_axes / 2 - 1) * height
-    panel_offset_factors = {0: 0, 2: 2.5 * height,
-                            4: default_panel_offset_factor,
-                            6: default_panel_offset_factor}
+    x_offset = 1
+    panel_offset_factors = {0: 0, 2: 2.5 * height, 4: height, 6: 2 * height}
     panel_offset_factor = panel_offset_factors.get(last_primary_axes)
-    y_offset_ratios = {0: -0.012, 2: -0.04, 4: -0.06, 6: -0.07}
+    y_offset_ratios = {0: default_y_offset_ratio,
+                       2: 3.5 * default_y_offset_ratio,
+                       4: 4.5 * default_y_offset_ratio,
+                       6: 5.5 * default_y_offset_ratio}
     y_offset_ratio = y_offset_ratios.get(last_primary_axes)
     y = top + panel_offset_factor + y_offset_ratio * height
 
