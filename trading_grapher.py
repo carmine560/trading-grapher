@@ -4,6 +4,7 @@
 
 import argparse
 import configparser
+import glob
 import importlib
 import os
 import sys
@@ -27,51 +28,23 @@ def main():
     """Parse trade data, save market data, plot charts, and check charts."""
     args = get_arguments()
     config_path = file_utilities.get_config_path(__file__)
-    backup_parameters = {'number_of_backups': 8}
-
-    if args.B:
-        file_utilities.create_bash_wrapper(__file__, args.B)
-        return
-    if any((args.G, args.J)):
-        config = configure(config_path, can_interpolate=False)
-        if args.G and configuration.modify_section(
-                config, 'General', config_path,
-                backup_parameters=backup_parameters):
-            return
-        if args.J and configuration.modify_section(
-                config, 'Trading Journal', config_path,
-                backup_parameters=backup_parameters):
-            return
-    elif args.C:
-        default_config = configure(config_path, can_interpolate=False,
-                                   can_override=False)
-        configuration.check_config_changes(
-            default_config, config_path, backup_parameters=backup_parameters)
-        return
-    else:
-        config = configure(config_path)
-
+    config = configure(config_path)
     trading_path = args.f[0] if args.f else config['General']['trading_path']
-    charts_directory = (args.d[0] if args.d
-                        else config['General']['charts_directory'])
+    trading_sheet = config['General']['trading_sheet']
 
-    trading_journal = pd.read_excel(
-        trading_path, sheet_name=config['General']['trading_sheet'])
+    configure_exit(args, config_path, trading_path, trading_sheet)
+
+    trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
     trading_journal_columns = (
         ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
          'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
          'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
          'optional_percentage_change']
         + [f'optional_note_{index}' for index in range(1, 11)])
-
-    try:
-        style = importlib.import_module(
-            f"styles.{config['General']['style']}").style
-    except ModuleNotFoundError as e:
-        print(e)
-        sys.exit(1)
-
+    charts_directory = (args.d[0] if args.d
+                        else config['General']['charts_directory'])
     has_plotted = False
+
     for date in pd.to_datetime(args.dates):
         trades = trading_journal.loc[
             trading_journal[config['Trading Journal']['entry_date']] == date]
@@ -84,15 +57,23 @@ def main():
 
                 if not trade_data['optional_number']:
                     trade_data['optional_number'] = index - first_index + 1
-
                 for d in ['entry_date', 'exit_date']:
                     trade_data[d] = trade_data[d].tz_localize(
                         config['Market Data']['timezone'])
 
+                trade_data['trade_type'] = trade_data['trade_type'].lower()
                 market_data_path = os.path.join(
                     charts_directory,
                     f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
                     f"-{trade_data['symbol']}.csv")
+
+                try:
+                    style = importlib.import_module(
+                        f"styles.{config['Styles'][trade_data['trade_type']]}"
+                    ).style
+                except ModuleNotFoundError as e:
+                    print(e)
+                    sys.exit(1)
 
                 save_market_data(config, trade_data, market_data_path)
                 plot_charts(config, trade_data, market_data_path, style,
@@ -136,6 +117,9 @@ def get_arguments():
         '-J', action='store_true',
         help='configure the columns of the trading journal and exit')
     group.add_argument(
+        '-S', action='store_true',
+        help='configure the styles based on the trade context and exit')
+    group.add_argument(
         '-C', action='store_true',
         help='check configuration changes and exit')
 
@@ -154,8 +138,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'trading_path': os.path.join(os.path.expanduser('~'),
                                      'Documents/Trading', 'Trading.ods'),
         'trading_sheet': 'Trading Journal',
-        # TODO: add completion
-        'style': 'fluorite',    # TODO: add ametrine and amber
         'charts_directory': os.path.join(os.path.expanduser('~'),
                                          'Documents/Trading')}
     config['Market Data'] = {
@@ -167,7 +149,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'timezone': 'Asia/Tokyo',
         'exchange_suffix': '.T'}
 
-    config['Trading Journal'] = { # TODO: add completion
+    config['Trading Journal'] = {
         'optional_number': 'Number',
         'symbol': 'Symbol',
         'trade_type': 'Trade type',
@@ -194,7 +176,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'scale_padding_left': '0.8'}
     config['Active Trading Hours'] = {
         'is_added': 'True',
-        # TODO: add completion
         'start_time': '${Market Data:opening_time}',
         'end_time': '${Market Data:closing_time}'}
     config['EMA'] = {
@@ -222,11 +203,50 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Text'] = {
         'is_added': 'True',
         'default_y_offset_ratio': '-0.008'}
+    config['Styles'] = {        # TODO: add ametrine
+        'long': 'fluorite',
+        'short': 'fluorite'}
 
     if can_override:
         configuration.read_config(config, config_path)
 
     return config
+
+
+def configure_exit(args, config_path, trading_path, trading_sheet):
+    """Configure parameters based on command-line arguments and exit."""
+    backup_parameters = {'number_of_backups': 8}
+    if args.B:
+        file_utilities.create_bash_wrapper(__file__, args.B)
+        sys.exit()
+    if any((args.G, args.J, args.S)):
+        config = configure(config_path, can_interpolate=False)
+        if args.G:
+            configuration.modify_section(config, 'General', config_path,
+                                         backup_parameters=backup_parameters,
+                                         can_back=True)
+        if args.J:
+            configuration.modify_section(
+                config, 'Trading Journal', config_path,
+                backup_parameters=backup_parameters, can_back=True,
+                all_values=tuple(pd.read_excel(
+                    trading_path, sheet_name=trading_sheet).columns),
+                prompts={'value': 'column'})
+        if args.S:
+            configuration.modify_section(
+                config, 'Styles', config_path,
+                backup_parameters=backup_parameters, can_back=True,
+                all_values=[
+                    os.path.basename(f)[:-3]
+                    for f in glob.glob(os.path.join(os.path.dirname(__file__),
+                                                    'styles', '*.py'))])
+            sys.exit()
+    if args.C:
+        default_config = configure(config_path, can_interpolate=False,
+                                   can_override=False)
+        configuration.check_config_changes(
+            default_config, config_path, backup_parameters=backup_parameters)
+        sys.exit()
 
 
 def save_market_data(config, trade_data, market_data_path):
@@ -347,9 +367,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     if (not pd.isna(trade_data['entry_price'])
         and not pd.isna(trade_data['exit_price'])):
         result = (trade_data['exit_price'] - trade_data['entry_price']
-                  if trade_data['trade_type'].lower() == 'long'
+                  if trade_data['trade_type'] == 'long'
                   else trade_data['entry_price'] - trade_data['exit_price']
-                  if trade_data['trade_type'].lower() == 'short'
+                  if trade_data['trade_type'] == 'short'
                   else 0)
 
     addplot = []

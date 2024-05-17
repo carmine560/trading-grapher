@@ -326,7 +326,8 @@ def modify_option(config, section, option, config_path, backup_parameters=None,
             else:
                 config[section][option] = modify_value(
                     prompts.get('value', 'value'),
-                    value=config[section][option], limits=limits)
+                    value=config[section][option], all_values=all_values,
+                    limits=limits)
         elif answer == 'toggle':
             config[section][option] = str(not boolean_value)
         elif answer == 'empty':

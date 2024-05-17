@@ -64,12 +64,13 @@ the configurations above. Then:
     script
   * `-G`: configure general options and exit
   * `-J`: configure the columns of the trading journal and exit
+  * `-S`: configure the styles based on the trade context and exit
   * `-C`: check configuration changes and exit
 
 ## Styles ##
 
 `trading_grapher.py` provides the following style modules, which you can
-specify using the `-G` option.
+specify using the `-S` option.
 
 ### `fluorite` ###
 
