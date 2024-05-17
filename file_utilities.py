@@ -283,6 +283,25 @@ def select_venv(directory, activate='activate'):
 
 # CLI Operations #
 
+def add_wrapper_options(group):
+    """Add wrapper generation options to the argparse group."""
+    if sys.platform == 'win32':
+        group.add_argument(
+            '-B', nargs='?', const='.',
+            help='generate a WSL Bash script to launch this script and exit',
+            metavar='OUTPUT_DIRECTORY')
+        group.add_argument(
+            '-PS', nargs='?', const='.',
+            help='generate a PowerShell 7 script to launch this script'
+            ' and exit',
+            metavar='OUTPUT_DIRECTORY')
+    elif sys.platform == 'linux':
+        group.add_argument(
+            '-B', nargs='?', const='.',
+            help='generate a Bash script to launch this script and exit',
+            metavar='OUTPUT_DIRECTORY')
+
+
 def create_bash_wrapper(script_path, output_directory):
     """Create a WSL Bash wrapper for a Python script."""
     activate_path, interpreter = select_venv(os.path.dirname(script_path))

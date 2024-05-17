@@ -106,10 +106,9 @@ def get_arguments():
         help='specify the directory path'
         ' for storing historical data and charts',
         metavar='DIRECTORY')
-    group.add_argument(
-        '-B', nargs='?', const='.',
-        help='generate a Bash script to activate and run this script',
-        metavar='OUTPUT_DIRECTORY')
+
+    file_utilities.add_wrapper_options(group)
+
     group.add_argument(
         '-G', action='store_true',
         help='configure general options and exit')
