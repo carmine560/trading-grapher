@@ -239,7 +239,8 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
                     os.path.basename(f)[:-3]
                     for f in glob.glob(os.path.join(os.path.dirname(__file__),
                                                     'styles', '*.py'))])
-            sys.exit()
+
+        sys.exit()
     if args.C:
         default_config = configure(config_path, can_interpolate=False,
                                    can_override=False)
