@@ -203,9 +203,9 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Text'] = {
         'is_added': 'True',
         'default_y_offset_ratio': '-0.008'}
-    config['Styles'] = {        # TODO: add ametrine
+    config['Styles'] = {
         'long': 'fluorite',
-        'short': 'fluorite'}
+        'short': 'ametrine'}
 
     if can_override:
         configuration.read_config(config, config_path)

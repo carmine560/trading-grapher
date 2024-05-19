@@ -79,8 +79,8 @@ trade](examples/fluorite.png)
 
 ### `ametrine` ###
 
-<!-- ![A ‘ametrine’ style chart showing the result of a specific stock day
-trade](examples/ametrine.png) -->
+![A ‘ametrine’ style chart showing the result of a specific stock day
+trade](examples/ametrine.png)
 
 ### `amber` ###
 
