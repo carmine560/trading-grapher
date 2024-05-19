@@ -32,6 +32,7 @@ def main():
     trading_path = args.f[0] if args.f else config['General']['trading_path']
     trading_sheet = config['General']['trading_sheet']
 
+    file_utilities.create_launchers_exit(args, __file__)
     configure_exit(args, config_path, trading_path, trading_sheet)
 
     trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
@@ -107,7 +108,7 @@ def get_arguments():
         ' for storing historical data and charts',
         metavar='DIRECTORY')
 
-    file_utilities.add_wrapper_options(group)
+    file_utilities.add_launcher_options(group)
 
     group.add_argument(
         '-G', action='store_true',
@@ -215,37 +216,33 @@ def configure(config_path, can_interpolate=True, can_override=True):
 def configure_exit(args, config_path, trading_path, trading_sheet):
     """Configure parameters based on command-line arguments and exit."""
     backup_parameters = {'number_of_backups': 8}
-    if args.B:
-        file_utilities.create_bash_wrapper(__file__, args.B)
-        sys.exit()
     if any((args.G, args.J, args.S)):
         config = configure(config_path, can_interpolate=False)
-        if args.G:
-            configuration.modify_section(config, 'General', config_path,
-                                         backup_parameters=backup_parameters,
-                                         can_back=True)
-        if args.J:
-            configuration.modify_section(
-                config, 'Trading Journal', config_path,
-                backup_parameters=backup_parameters, can_back=True,
-                all_values=tuple(pd.read_excel(
-                    trading_path, sheet_name=trading_sheet).columns),
-                prompts={'value': 'column'})
-        if args.S:
-            configuration.modify_section(
-                config, 'Styles', config_path,
-                backup_parameters=backup_parameters, can_back=True,
-                all_values=[
-                    os.path.basename(f)[:-3]
-                    for f in glob.glob(os.path.join(os.path.dirname(__file__),
-                                                    'styles', '*.py'))])
+        for argument, (
+                section, option, prompts, all_values
+        ) in {
+            'G': ('General', None, None, None),
+            'J': ('Trading Journal', None, {'value': 'column'}, None),
+            'S': ('Styles', None, None,
+                  [os.path.basename(f)[:-3] for f in glob.glob(
+                      os.path.join(os.path.dirname(__file__),
+                                   'styles', '*.py'))])}.items():
+            if getattr(args, argument):
+                configuration.modify_section(
+                    config, section, config_path,
+                    backup_parameters=backup_parameters, option=option,
+                    prompts=prompts,
+                    all_values=(
+                        tuple(pd.read_excel(trading_path,
+                                            sheet_name=trading_sheet).columns)
+                        if argument == 'J' else all_values))
+                break
 
         sys.exit()
     if args.C:
-        default_config = configure(config_path, can_interpolate=False,
-                                   can_override=False)
         configuration.check_config_changes(
-            default_config, config_path, backup_parameters=backup_parameters)
+            configure(config_path, can_interpolate=False, can_override=False),
+            config_path, backup_parameters=backup_parameters)
         sys.exit()
 
 

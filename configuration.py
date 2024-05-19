@@ -210,15 +210,15 @@ def list_section(config, section):
 
 
 def modify_section(config, section, config_path, backup_parameters=None,
-                   can_back=False, can_insert_delete=False, prompts=None,
-                   items=None, all_values=None):
+                   option=None, can_back=True, can_insert_delete=False,
+                   prompts=None, items=None, all_values=None, limits=()):
     """Modify a section of a configuration based on user input."""
     if backup_parameters:
         file_utilities.backup_file(config_path, **backup_parameters)
 
     if config.has_section(section):
         index = 0
-        options = config.options(section)
+        options = [option] if option else config.options(section)
         length = len(options) + 1 if can_insert_delete else len(options)
         if prompts is None:
             prompts = {}
@@ -231,7 +231,7 @@ def modify_section(config, section, config_path, backup_parameters=None,
                                        can_back=current_can_back,
                                        can_insert_delete=can_insert_delete,
                                        prompts=prompts, items=items,
-                                       all_values=all_values)
+                                       all_values=all_values, limits=limits)
 
                 if result == 'back':
                     index -= 1
@@ -306,7 +306,8 @@ def modify_option(config, section, option, config_path, backup_parameters=None,
                 config[section][option] = str(modify_dictionary(
                     evaluated_value, level=1, prompts=prompts,
                     all_values=all_values))
-            elif isinstance(evaluated_value, tuple):
+            elif (isinstance(evaluated_value, tuple)
+                  and all(isinstance(i, str) for i in evaluated_value)):
                 config[section][option] = str(modify_tuple(
                     evaluated_value, level=1, prompts=prompts,
                     all_values=all_values))
@@ -627,6 +628,7 @@ def modify_value(prompt, level=0, value='', all_values=None, limits=()):
                              all_values=all_values)
     minimum_value, maximum_value = limits or (None, None)
     numeric_value = None
+
     if isinstance(minimum_value, int) and isinstance(maximum_value, int):
         try:
             numeric_value = int(float(value))
@@ -646,11 +648,6 @@ def modify_value(prompt, level=0, value='', all_values=None, limits=()):
             numeric_value = min(maximum_value, numeric_value)
 
         value = str(numeric_value)
-
-    if all_values and value not in all_values and all_values != ('None',):
-        value = modify_value(prompt, level=level,
-                             value=f'{ANSI_RESET}{ANSI_ERROR}{value}',
-                             all_values=all_values)
 
     return value
 
