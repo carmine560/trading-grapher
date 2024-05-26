@@ -87,10 +87,10 @@ trade](examples/ametrine.png)
 <!-- ![A ‘amber’ style chart showing the result of a specific stock day
 trade](examples/amber.png) -->
 
-<!-- ### `opal` ### -->
+### `opal` ###
 
-<!-- ![A ‘opal’ style chart showing the result of a specific stock day
-trade](examples/opal.png) -->
+![A ‘opal’ style chart showing the result of a specific stock day
+trade](examples/opal.png)
 
 ## License ##
 

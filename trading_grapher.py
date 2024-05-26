@@ -211,9 +211,8 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Styles'] = {
         'fluorite': ('', ''),
         'ametrine': ('trade_type', 'short'),
-        # 'amber': ('', ''),
-        # 'opal': ('', ''),
-    }
+        # 'amber': ('', ''),      # TODO
+        'opal': ('', '')}
 
     if can_override:
         configuration.read_config(config, config_path)
