@@ -70,7 +70,7 @@ def main():
                 style_name = 'fluorite'
                 for s in config.options('Styles'):
                     c, v = configuration.evaluate_value(config['Styles'][s])
-                    if trade_data[c] == v:
+                    if c and trade_data[c] == v:
                         style_name = s
                         break
 
@@ -209,7 +209,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'is_added': 'True',
         'default_y_offset_ratio': '-0.008'}
     config['Styles'] = {
-        'fluorite': ('trade_type', 'long'),
+        'fluorite': ('', ''),
         'ametrine': ('trade_type', 'short'),
         # 'amber': ('', ''),
         # 'opal': ('', ''),
