@@ -4,7 +4,6 @@
 
 import argparse
 import configparser
-import glob
 import importlib
 import os
 import sys
@@ -19,6 +18,12 @@ import configuration
 import file_utilities
 import indicators
 
+TRADING_JOURNAL_COLUMNS = (
+    ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
+     'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
+     'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
+     'optional_percentage_change']
+    + [f'optional_note_{index}' for index in range(1, 11)])
 ISO_DATE_FORMAT = '%Y-%m-%d'
 DATE_FORMAT = '%b %-d'
 TIME_FORMAT = '%-H:%M'
@@ -36,12 +41,6 @@ def main():
     configure_exit(args, config_path, trading_path, trading_sheet)
 
     trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
-    trading_journal_columns = (
-        ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
-         'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
-         'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
-         'optional_percentage_change']
-        + [f'optional_note_{index}' for index in range(1, 11)])
     charts_directory = (args.d[0] if args.d
                         else config['General']['charts_directory'])
     has_plotted = False
@@ -54,7 +53,7 @@ def main():
             for index, trade in trades.iterrows():
                 trade_data = {
                     column: trade.get(config['Trading Journal'][column])
-                    for column in trading_journal_columns}
+                    for column in TRADING_JOURNAL_COLUMNS}
 
                 if not trade_data['optional_number']:
                     trade_data['optional_number'] = index - first_index + 1
@@ -68,10 +67,16 @@ def main():
                     f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
                     f"-{trade_data['symbol']}.csv")
 
+                style_name = 'fluorite'
+                for s in config.options('Styles'):
+                    c, v = configuration.evaluate_value(config['Styles'][s])
+                    if trade_data[c] == v:
+                        style_name = s
+                        break
+
                 try:
                     style = importlib.import_module(
-                        f"styles.{config['Styles'][trade_data['trade_type']]}"
-                    ).style
+                        f"styles.{style_name}").style
                 except ModuleNotFoundError as e:
                     print(e)
                     sys.exit(1)
@@ -204,8 +209,11 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'is_added': 'True',
         'default_y_offset_ratio': '-0.008'}
     config['Styles'] = {
-        'long': 'fluorite',
-        'short': 'ametrine'}
+        'fluorite': ('trade_type', 'long'),
+        'ametrine': ('trade_type', 'short'),
+        # 'amber': ('', ''),
+        # 'opal': ('', ''),
+    }
 
     if can_override:
         configuration.read_config(config, config_path)
@@ -223,10 +231,8 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
         ) in {
             'G': ('General', None, None, None),
             'J': ('Trading Journal', None, {'value': 'column'}, None),
-            'S': ('Styles', None, None,
-                  [os.path.basename(f)[:-3] for f in glob.glob(
-                      os.path.join(os.path.dirname(__file__),
-                                   'styles', '*.py'))])}.items():
+            'S': ('Styles', None, {'values': ('column', 'value')},
+                  (TRADING_JOURNAL_COLUMNS, None))}.items():
             if getattr(args, argument):
                 configuration.modify_section(
                     config, section, config_path,

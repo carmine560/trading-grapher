@@ -82,10 +82,15 @@ trade](examples/fluorite.png)
 ![A ‘ametrine’ style chart showing the result of a specific stock day
 trade](examples/ametrine.png)
 
-### `amber` ###
+<!-- ### `amber` ### -->
 
 <!-- ![A ‘amber’ style chart showing the result of a specific stock day
 trade](examples/amber.png) -->
+
+<!-- ### `opal` ### -->
+
+<!-- ![A ‘opal’ style chart showing the result of a specific stock day
+trade](examples/opal.png) -->
 
 ## License ##
 
