@@ -209,9 +209,9 @@ def configure(config_path, can_interpolate=True, can_override=True):
         'is_added': 'True',
         'default_y_offset_ratio': '-0.008'}
     config['Styles'] = {
+        'amber': ('', ''),
+        'ametrine': ('', ''),
         'fluorite': ('', ''),
-        'ametrine': ('trade_type', 'short'),
-        # 'amber': ('', ''),      # TODO
         'opal': ('', '')}
 
     if can_override:

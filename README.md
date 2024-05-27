@@ -72,20 +72,20 @@ the configurations above. Then:
 `trading_grapher.py` provides the following style modules, which you can
 specify using the `-S` option.
 
-### `fluorite` ###
+### `amber` ###
 
-![A ‘fluorite’ style chart showing the result of a specific stock day
-trade](examples/fluorite.png)
+![A ‘amber’ style chart showing the result of a specific stock day
+trade](examples/amber.png)
 
 ### `ametrine` ###
 
 ![A ‘ametrine’ style chart showing the result of a specific stock day
 trade](examples/ametrine.png)
 
-<!-- ### `amber` ### -->
+### `fluorite` (Default) ###
 
-<!-- ![A ‘amber’ style chart showing the result of a specific stock day
-trade](examples/amber.png) -->
+![A ‘fluorite’ style chart showing the result of a specific stock day
+trade](examples/fluorite.png)
 
 ### `opal` ###
 
