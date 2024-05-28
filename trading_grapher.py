@@ -70,7 +70,7 @@ def main():
                 style_name = 'fluorite'
                 for s in config.options('Styles'):
                     c, v = configuration.evaluate_value(config['Styles'][s])
-                    if c and (c == 'any' or trade_data[c] == v):
+                    if c == 'any' or trade_data.get(c) == v:
                         style_name = s
                         break
 
