@@ -70,7 +70,7 @@ def main():
                 style_name = 'fluorite'
                 for s in config.options('Styles'):
                     c, v = configuration.evaluate_value(config['Styles'][s])
-                    if c and trade_data[c] == v:
+                    if c and (c == 'any' or trade_data[c] == v):
                         style_name = s
                         break
 
@@ -231,7 +231,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
             'G': ('General', None, None, None),
             'J': ('Trading Journal', None, {'value': 'column'}, None),
             'S': ('Styles', None, {'values': ('column', 'value')},
-                  (TRADING_JOURNAL_COLUMNS, None))}.items():
+                  (['any'] + TRADING_JOURNAL_COLUMNS, None))}.items():
             if getattr(args, argument):
                 configuration.modify_section(
                     config, section, config_path,
