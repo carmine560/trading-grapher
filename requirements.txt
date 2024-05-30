@@ -1,4 +1,4 @@
 mplfinance
 odfpy
 prompt_toolkit
-yahoo_finance_api2
+yfinance

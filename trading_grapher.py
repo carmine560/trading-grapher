@@ -8,23 +8,30 @@ import importlib
 import os
 import sys
 
-from yahoo_finance_api2 import share
-from yahoo_finance_api2.exceptions import YahooFinanceError
 import mplfinance as mpf
 import numpy as np
 import pandas as pd
+import yfinance
 
 import configuration
 import file_utilities
 import indicators
 
+ISO_DATE_FORMAT = '%Y-%m-%d'
 TRADING_JOURNAL_COLUMNS = (
     ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
      'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
      'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
      'optional_percentage_change']
     + [f'optional_note_{index}' for index in range(1, 11)])
-ISO_DATE_FORMAT = '%Y-%m-%d'
+
+DATETIME = 'Datetime'
+OPEN = 'Open'
+HIGH = 'High'
+LOW = 'Low'
+CLOSE = 'Close'
+VOLUME = 'Volume'
+
 DATE_FORMAT = '%b %-d'
 TIME_FORMAT = '%-H:%M'
 
@@ -253,7 +260,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
 
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
-    PERIOD_IN_DAYS = 7
+    PERIOD_IN_DAYS = 5
     delta = (
         pd.Timestamp.now(tz=config['Market Data']['timezone']).normalize()
         - trade_data['entry_date'])
@@ -274,27 +281,17 @@ def save_market_data(config, trade_data, market_data_path):
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        my_share = share.Share(f"{trade_data['symbol']}"
-                               f"{config['Market Data']['exchange_suffix']}")
-        try:
-            symbol_data = my_share.get_historical(
-                share.PERIOD_TYPE_DAY, PERIOD_IN_DAYS,
-                share.FREQUENCY_TYPE_MINUTE, 1)
-        except YahooFinanceError as e:
-            print(e.message)
-            sys.exit(1)
+        symbol_data = yfinance.Ticker(
+            f"{trade_data['symbol']}{config['Market Data']['exchange_suffix']}"
+        ).history(interval='1m', period=f'{PERIOD_IN_DAYS}d') # TODO
 
-        df = pd.DataFrame(symbol_data)
-        df.timestamp = pd.to_datetime(df.timestamp, unit='ms')
-        df.set_index('timestamp', inplace=True)
-        # Yahoo Finance's historical data is in UTC, but lacks explicit
-        # time zone information.
-        df.index = df.index.tz_localize('UTC').tz_convert(
-            config['Market Data']['timezone'])
-        q = df.volume.quantile(float(config['Volume']['quantile_threshold']))
-        df['volume'] = df['volume'].mask(df['volume'] > q, q)
+        q = symbol_data[VOLUME].quantile(
+            float(config['Volume']['quantile_threshold']))
+        symbol_data[VOLUME] = np.where(symbol_data[VOLUME] > q, q,
+                                       symbol_data[VOLUME])
+        symbol_data[VOLUME] = symbol_data[VOLUME].astype(int)
 
-        previous = df[df.index < trade_data['entry_date']]
+        previous = symbol_data[symbol_data.index < trade_data['entry_date']]
         if not previous.empty:
             previous_date = pd.Timestamp.date(
                 previous.dropna().tail(1).index[0])
@@ -319,12 +316,11 @@ def save_market_data(config, trade_data, market_data_path):
                                    config['Market Data']['closing_time'])
             end -= pd.Timedelta(minutes=1)
 
-        formalized = pd.DataFrame(columns=('open', 'high', 'low', 'close',
-                                           'volume'),
-                                  index=pd.date_range(start, end, freq='min'))
-        formalized.index.name = 'timestamp'
-        formalized = formalized.astype('float')
-        formalized.update(df)
+        formalized = pd.DataFrame(symbol_data,
+                                  index=pd.date_range(start, end, freq='min'),
+                                  columns=(OPEN, HIGH, LOW, CLOSE, VOLUME))
+        formalized.index.name = DATETIME
+        formalized[VOLUME] = formalized[VOLUME].astype('Int64')
 
         if morning and not previous.empty:
             start = create_timestamp(previous_date,
@@ -503,8 +499,8 @@ def prepare_parameters(config, formalized, trade_data, result, style):
     current = formalized[trade_data['entry_date'] <= formalized.index]
 
     if previous.notnull().values.any():
-        prices['closing'] = previous.dropna().tail(1).close.iloc[0]
-        prices['opening'] = current.dropna().head(1).open.iloc[0]
+        prices['closing'] = previous.dropna().tail(1)[CLOSE].iloc[0]
+        prices['opening'] = current.dropna().head(1)[OPEN].iloc[0]
 
     # nan is not recognized as False in a boolean context.
     if (not pd.isna(trade_data['entry_time'])
@@ -539,15 +535,15 @@ def add_emas(config, formalized, addplot, style):
     """Add exponential moving average plots to the existing plots."""
     addplot.extend([
         mpf.make_addplot(
-            indicators.ema(formalized.close,
+            indicators.ema(formalized[CLOSE],
                            int(config['EMA']['short_term_period'])),
             color=style['mavcolors'][0], width=0.8),
         mpf.make_addplot(
-            indicators.ema(formalized.close,
+            indicators.ema(formalized[CLOSE],
                            int(config['EMA']['medium_term_period'])),
             color=style['mavcolors'][1], width=0.8),
         mpf.make_addplot(
-            indicators.ema(formalized.close,
+            indicators.ema(formalized[CLOSE],
                            int(config['EMA']['long_term_period'])),
             color=style['mavcolors'][2], width=0.8)])
 
@@ -556,16 +552,16 @@ def add_macd(config, formalized, panel, addplot, style, ma='ema'):
     """Add moving average convergence divergence plots to the given panel."""
     if ma == 'ema':
         macd = (
-            indicators.ema(formalized.close,
+            indicators.ema(formalized[CLOSE],
                            int(config['MACD']['short_term_period']))
-            - indicators.ema(formalized.close,
+            - indicators.ema(formalized[CLOSE],
                              int(config['MACD']['long_term_period'])))
         ylabel = 'MACD'
     elif ma == 'tema':
         macd = (
-            indicators.tema(formalized.close,
+            indicators.tema(formalized[CLOSE],
                             int(config['MACD']['short_term_period']))
-            - indicators.tema(formalized.close,
+            - indicators.tema(formalized[CLOSE],
                               int(config['MACD']['long_term_period'])))
         ylabel = 'MACD TEMA'
 
@@ -591,7 +587,7 @@ def add_macd(config, formalized, panel, addplot, style, ma='ema'):
 def add_stochastics(config, formalized, panel, addplot, style):
     """Add stochastic oscillator plots to the given panel."""
     df = indicators.stochastics(
-        formalized.high, formalized.low, formalized.close,
+        formalized[HIGH], formalized[LOW], formalized[CLOSE],
         k=int(config['Stochastics']['k_period']),
         d=int(config['Stochastics']['d_period']),
         smooth_k=int(config['Stochastics']['smooth_k_period']))
@@ -606,9 +602,9 @@ def add_stochastics(config, formalized, panel, addplot, style):
     panel += 1
 
     addplot.extend([
-        mpf.make_addplot(formalized.k, color=style['mavcolors'][0],
+        mpf.make_addplot(formalized['k'], color=style['mavcolors'][0],
                          panel=panel, width=0.8, ylabel='Stochastics'),
-        mpf.make_addplot(formalized.d, color=style['mavcolors'][1],
+        mpf.make_addplot(formalized['d'], color=style['mavcolors'][1],
                          panel=panel, secondary_y=False, width=0.8)])
 
     return panel

@@ -22,8 +22,8 @@ the following packages:
     recorded in an OpenDocument Spreadsheet file
   * [`prompt_toolkit`](https://python-prompt-toolkit.readthedocs.io/en/master/index.html)
     to complete possible values or a previous value in configuring
-  * [`yahoo_finance_api2`](https://github.com/pkout/yahoo_finance_api2) to
-    retrieve historical data from Yahoo Finance
+  * [`yfinance`](https://github.com/ranaroussi/yfinance) to retrieve historical
+    data from Yahoo Finance
 
 Install each package as needed. For example:
 
