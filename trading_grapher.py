@@ -14,6 +14,7 @@ import pandas as pd
 import yfinance
 
 import configuration
+import data_utilities
 import file_utilities
 import indicators
 
@@ -435,7 +436,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
 
     if (config['Tooltips'].getboolean('is_added')
         and not pd.isna(trade_data['entry_price'])):
-        acronym = file_utilities.create_acronym(
+        acronym = data_utilities.create_acronym(
             trade_data['optional_entry_reason'])
         add_tooltips(axlist, trade_data['entry_price'],
                      f'{acronym}' if acronym else '',
@@ -445,7 +446,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
 
     if (config['Tooltips'].getboolean('is_added')
         and not pd.isna(trade_data['exit_price'])):
-        acronym = file_utilities.create_acronym(
+        acronym = data_utilities.create_acronym(
             trade_data['optional_exit_reason'])
         add_tooltips(axlist, trade_data['exit_price'],
                      f"{f'{acronym}, ' if acronym else ''}"
@@ -455,7 +456,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
                      formalized=formalized, timestamp=timestamps['exit'])
 
     if config['Text'].getboolean('is_added'):
-        tactic = file_utilities.create_acronym(trade_data['optional_tactic'])
+        tactic = data_utilities.create_acronym(trade_data['optional_tactic'])
         full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
         notes = [trade_data[f'optional_note_{i}'] for i in range(1, 11)
                  if trade_data[f'optional_note_{i}']]
