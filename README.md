@@ -20,7 +20,7 @@ the following packages:
     and the indicators based on historical data
   * [`odfpy`](https://github.com/eea/odfpy) to read the trading journal
     recorded in an OpenDocument Spreadsheet file
-  * [`prompt_toolkit`](https://python-prompt-toolkit.readthedocs.io/en/master/index.html)
+  * [`prompt_toolkit`](https://github.com/prompt-toolkit/python-prompt-toolkit)
     to complete possible values or a previous value in configuring
   * [`yfinance`](https://github.com/ranaroussi/yfinance) to retrieve historical
     data from Yahoo Finance
