@@ -122,7 +122,6 @@ def get_arguments():
         metavar='DIRECTORY')
 
     file_utilities.add_launcher_options(group)
-
     group.add_argument(
         '-G', action='store_true',
         help='configure general options and exit')

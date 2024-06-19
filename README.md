@@ -49,7 +49,7 @@ Next, configure the columns of the trading journal:
 ```
 
 The `~/.config/trading-grapher/trading_grapher.ini` configuration file stores
-the configurations above. Then:
+the configurations above. Then, execute:
 
 ``` shell
 ./trading_grapher.py [%Y-%m-%d ...]
