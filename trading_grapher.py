@@ -20,7 +20,7 @@ import indicators
 
 ISO_DATE_FORMAT = '%Y-%m-%d'
 TRADING_JOURNAL_COLUMNS = (
-    ['optional_number', 'symbol', 'trade_type', 'optional_tactic',
+    ['optional_number', 'symbol', 'position_type', 'optional_tactic',
      'entry_date', 'entry_time', 'entry_price', 'optional_entry_reason',
      'exit_date', 'exit_time', 'exit_price', 'optional_exit_reason',
      'optional_percentage_change']
@@ -69,7 +69,8 @@ def main():
                     trade_data[d] = trade_data[d].tz_localize(
                         config['Market Data']['timezone'])
 
-                trade_data['trade_type'] = trade_data['trade_type'].lower()
+                trade_data['position_type'] = (
+                    trade_data['position_type'].lower())
                 market_data_path = os.path.join(
                     charts_directory,
                     f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
@@ -164,7 +165,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
     config['Trading Journal'] = {
         'optional_number': 'Number',
         'symbol': 'Symbol',
-        'trade_type': 'Trade type',
+        'position_type': 'Position type',
         'optional_tactic': 'Tactic',
         'entry_date': 'Entry date',
         'entry_time': 'Entry time',
@@ -365,9 +366,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     if (not pd.isna(trade_data['entry_price'])
         and not pd.isna(trade_data['exit_price'])):
         result = (trade_data['exit_price'] - trade_data['entry_price']
-                  if trade_data['trade_type'] == 'long'
+                  if trade_data['position_type'] == 'long'
                   else trade_data['entry_price'] - trade_data['exit_price']
-                  if trade_data['trade_type'] == 'short'
+                  if trade_data['position_type'] == 'short'
                   else 0)
 
     addplot = []
@@ -462,7 +463,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         add_text(axlist, float(config['Text']['default_y_offset_ratio']),
                  f"Trade {trade_data['optional_number']}"
                  f" for {trade_data['symbol']}"
-                 f" using {trade_data['trade_type'].title()}"
+                 f" using {trade_data['position_type'].title()}"
                  f"{f' {tactic}' if tactic else ''}"
                  f" on {trade_data['entry_date'].strftime(full_date_format)}"
                  f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}",
