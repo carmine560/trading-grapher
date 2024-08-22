@@ -74,22 +74,22 @@ specify using the `-S` option.
 
 ### `amber` ###
 
-![A ‘amber’ style chart showing the result of a specific stock day
+![A “amber” style chart showing the result of a specific stock day
 trade](examples/amber.png)
 
 ### `ametrine` ###
 
-![A ‘ametrine’ style chart showing the result of a specific stock day
+![A “ametrine” style chart showing the result of a specific stock day
 trade](examples/ametrine.png)
 
 ### `fluorite` (Default) ###
 
-![A ‘fluorite’ style chart showing the result of a specific stock day
+![A “fluorite” style chart showing the result of a specific stock day
 trade](examples/fluorite.png)
 
 ### `opal` ###
 
-![A ‘opal’ style chart showing the result of a specific stock day
+![A “opal” style chart showing the result of a specific stock day
 trade](examples/opal.png)
 
 ## License ##
