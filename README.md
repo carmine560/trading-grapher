@@ -8,9 +8,6 @@ trading in a spreadsheet, as well as the MACD and the stochastics, using the
 `mplfinance` package based on historical data from [Yahoo
 Finance](https://finance.yahoo.com/).
 
-> **Warning**: `trading_grapher.py` is currently under heavy development.
-> Changes in functionality may occur at any time.
-
 ## Prerequisites ##
 
 `trading_grapher.py` has been tested on Debian Testing on WSL 2 and requires
