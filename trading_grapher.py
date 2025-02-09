@@ -284,7 +284,8 @@ def save_market_data(config, trade_data, market_data_path):
     else:
         symbol_data = yfinance.Ticker(
             f"{trade_data['symbol']}{config['Market Data']['exchange_suffix']}"
-        ).history(interval='1m', period=f'{PERIOD_IN_DAYS}d') # TODO
+            # TODO: make configurable
+        ).history(interval='1m', period=f'{PERIOD_IN_DAYS}d')
 
         q = symbol_data[VOLUME].quantile(
             float(config['Volume']['quantile_threshold']))
