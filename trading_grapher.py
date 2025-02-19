@@ -282,10 +282,15 @@ def save_market_data(config, trade_data, market_data_path):
         < modified_time + pd.Timedelta(minutes=1)):
         return
     else:
-        symbol_data = yfinance.Ticker(
-            f"{trade_data['symbol']}{config['Market Data']['exchange_suffix']}"
-            # TODO: make configurable
-        ).history(interval='1m', period=f'{PERIOD_IN_DAYS}d')
+        try:
+            symbol_data = yfinance.Ticker(
+                f"{trade_data['symbol']}"
+                f"{config['Market Data']['exchange_suffix']}"
+                # TODO: make configurable
+            ).history(interval='1m', period=f'{PERIOD_IN_DAYS}d')
+        except Exception as e:
+            print(e)
+            sys.exit(1)
 
         q = symbol_data[VOLUME].quantile(
             float(config['Volume']['quantile_threshold']))
