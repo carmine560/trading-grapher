@@ -71,10 +71,12 @@ def main():
 
                 trade_data['position_type'] = (
                     trade_data['position_type'].lower())
+                session = ('am' if pd.Timedelta(str(trade_data['exit_time']))
+                           < pd.Timedelta(hours=12) else 'pm')
                 market_data_path = os.path.join(
                     charts_directory,
-                    f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}-00"
-                    f"-{trade_data['symbol']}.csv")
+                    f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
+                    f"-{session}-{trade_data['symbol']}.csv")
 
                 style_name = 'fluorite'
                 for s in config.options('Styles'):
