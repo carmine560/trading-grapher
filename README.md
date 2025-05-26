@@ -90,4 +90,4 @@ trade](examples/opal.png)
 
 ## License ##
 
-[MIT](LICENSE.md)
+The [MIT License](LICENSE.md)
