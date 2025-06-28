@@ -465,7 +465,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
 
     if config['Text'].getboolean('is_added'):
         tactic = data_utilities.create_acronym(trade_data['optional_tactic'])
-        full_date_format = f'%a, {DATE_FORMAT}, {chr(39)}%y,'
+        full_date_format = f'%a, {DATE_FORMAT}, ’%y,'
         notes = [trade_data[f'optional_note_{i}'] for i in range(1, 11)
                  if trade_data[f'optional_note_{i}']]
         add_text(axlist, float(config['Text']['default_y_offset_ratio']),
