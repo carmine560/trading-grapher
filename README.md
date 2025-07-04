@@ -57,7 +57,8 @@ the configurations above. Then, execute:
   * `-f FILE`: specify the file path to the trading journal spreadsheet
   * `-d DIRECTORY`: specify the directory path for storing historical data and
     charts
-  * `-BS`: generate a Bash script to launch this script and exit
+  * `-BS`: save a Bash script to `$HOME/Downloads` to launch this script and
+    exit
   * `-G`: configure general options and exit
   * `-J`: configure the columns of the trading journal and exit
   * `-S`: configure the styles based on the trade context and exit
