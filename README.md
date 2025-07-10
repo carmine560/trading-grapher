@@ -89,6 +89,11 @@ trade](examples/fluorite.png)
 ![A “opal” style chart showing the result of a specific stock day
 trade](examples/opal.png)
 
+## To Do
+
+Visit the “[To Do](https://github.com/carmine560/trading-grapher/wiki#to-do)”
+section in the wiki.
+
 ## License ##
 
 This project is licensed under the [MIT License](LICENSE.md). The `.gitignore`
