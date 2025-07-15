@@ -9,7 +9,7 @@ import pandas as pd
 def ema(series, span):
     """Calculate the exponential moving average of a series."""
     ema = series.ewm(span=span).mean()
-    ema.iloc[:span - 1] = np.nan
+    ema.iloc[: span - 1] = np.nan
     return ema
 
 
@@ -19,7 +19,7 @@ def tema(series, span):
     ema_2 = ema(ema_1, span)
     ema_3 = ema(ema_2, span)
     tema = 3 * (ema_1 - ema_2) + ema_3
-    tema.iloc[:3 * (span - 1)] = np.nan
+    tema.iloc[: 3 * (span - 1)] = np.nan
     return tema
 
 
@@ -38,4 +38,4 @@ def stochastics(high, low, close, k, d, smooth_k):
     stochastics_k = stochastics.rolling(smooth_k).mean()
     stochastics_d = stochastics_k.rolling(d).mean()
 
-    return pd.DataFrame({'k': stochastics_k, 'd': stochastics_d})
+    return pd.DataFrame({"k": stochastics_k, "d": stochastics_d})
