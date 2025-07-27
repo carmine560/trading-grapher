@@ -21,12 +21,12 @@ import indicators
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
     "optional_number",
-    "symbol",
-    "position_type",
-    "optional_tactic",
     "entry_date",
     "entry_time",
+    "symbol",
+    "order_specification",
     "entry_price",
+    "optional_tactic",
     "optional_entry_reason",
     "exit_date",
     "exit_time",
@@ -77,13 +77,13 @@ def main():
 
                 if not trade_data["optional_number"]:
                     trade_data["optional_number"] = index - first_index + 1
-                for d in ["entry_date", "exit_date"]:
-                    trade_data[d] = trade_data[d].tz_localize(
+                for date in ["entry_date", "exit_date"]:
+                    trade_data[date] = trade_data[date].tz_localize(
                         config["Market Data"]["timezone"]
                     )
 
-                trade_data["position_type"] = trade_data[
-                    "position_type"
+                trade_data["order_specification"] = trade_data[
+                    "order_specification"
                 ].lower()
                 session = (
                     "am"
@@ -98,10 +98,12 @@ def main():
                 )
 
                 style_name = "fluorite"
-                for s in config.options("Styles"):
-                    c, v = configuration.evaluate_value(config["Styles"][s])
-                    if c == "any" or trade_data.get(c) == v:
-                        style_name = s
+                for option in config.options("Styles"):
+                    key, value = configuration.evaluate_value(
+                        config["Styles"][option]
+                    )
+                    if value in trade_data.get(key):
+                        style_name = option
                         break
 
                 try:
@@ -210,19 +212,19 @@ def configure(config_path, can_interpolate=True, can_override=True):
 
     config["Trading Journal"] = {
         "optional_number": "Number",
-        "symbol": "Symbol",
-        "position_type": "Position type",
-        "optional_tactic": "Tactic",
         "entry_date": "Entry date",
         "entry_time": "Entry time",
+        "symbol": "Symbol",
+        "order_specification": "Order specification",
         "entry_price": "Entry price",
+        "optional_tactic": "Tactic",
         "optional_entry_reason": "Entry reason",
         "exit_date": "Exit date",
         "exit_time": "Exit time",
         "exit_price": "Exit price",
         "optional_exit_reason": "Exit reason",
-        "optional_percentage_change": "Percentage Change",
-        "optional_chart_file": "optional_chart_file",
+        "optional_percentage_change": "Percentage change",
+        "optional_chart_file": "Chart file",
     }
     for index in range(1, 11):
         config["Trading Journal"][f"optional_note_{index}"] = f"Note {index}"
@@ -360,11 +362,13 @@ def save_market_data(config, trade_data, market_data_path):
             print(e)
             sys.exit(1)
 
-        q = symbol_data[VOLUME].quantile(
+        volume_threshold = symbol_data[VOLUME].quantile(
             float(config["Volume"]["quantile_threshold"])
         )
         symbol_data[VOLUME] = np.where(
-            symbol_data[VOLUME] > q, q, symbol_data[VOLUME]
+            symbol_data[VOLUME] > volume_threshold,
+            volume_threshold,
+            symbol_data[VOLUME],
         )
         symbol_data[VOLUME] = symbol_data[VOLUME].astype(int)
 
@@ -457,10 +461,10 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     ):
         result = (
             trade_data["exit_price"] - trade_data["entry_price"]
-            if trade_data["position_type"] == "long"
+            if "long" in trade_data["order_specification"]
             else (
                 trade_data["entry_price"] - trade_data["exit_price"]
-                if trade_data["position_type"] == "short"
+                if "short" in trade_data["order_specification"]
                 else 0
             )
         )
@@ -598,7 +602,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         )
 
     if config["Text"].getboolean("is_added"):
-        tactic = data_utilities.create_acronym(trade_data["optional_tactic"])
+        tactic = trade_data["optional_tactic"]
         full_date_format = f"%a, {DATE_FORMAT}, ’%y,"
         notes = [
             trade_data[f"optional_note_{i}"]
@@ -610,9 +614,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
             float(config["Text"]["default_y_offset_ratio"]),
             f"Trade {trade_data['optional_number']}"
             f" for {trade_data['symbol']}"
-            f" using {trade_data['position_type'].title()}"
-            f"{f' {tactic}' if tactic else ''}"
-            f" on {trade_data['entry_date'].strftime(full_date_format)}"
+            f" using {trade_data['order_specification'].title()}"
+            f"{f'—{tactic.title()}' if tactic else ''}\n"
+            f"on {trade_data['entry_date'].strftime(full_date_format)}"
             f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}",
             pd.Series(notes).dropna(),
             style["facecolor"],
@@ -964,13 +968,14 @@ def add_text(
         ),
     )
 
-    notes = ""
-    for note_index, value in note_series.items():
-        notes = (
-            f"\n{note_index + 1}. {value}"
-            if note_index == 0
-            else f"{notes}\n{note_index + 1}. {value}"
+    notes = (
+        "\n\n"
+        + "\n".join(
+            f"{index + 1}. {value}" for index, value in enumerate(note_series)
         )
+        if not note_series.empty
+        else ""
+    )
 
     if notes:
         axlist[last_primary_axes].text(
