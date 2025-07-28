@@ -28,7 +28,6 @@ TRADING_JOURNAL_COLUMNS = [
     "entry_price",
     "optional_tactic",
     "optional_entry_reason",
-    "exit_date",
     "exit_time",
     "exit_price",
     "optional_exit_reason",
@@ -77,10 +76,10 @@ def main():
 
                 if not trade_data["optional_number"]:
                     trade_data["optional_number"] = index - first_index + 1
-                for date in ["entry_date", "exit_date"]:
-                    trade_data[date] = trade_data[date].tz_localize(
-                        config["Market Data"]["timezone"]
-                    )
+
+                trade_data["entry_date"] = trade_data[
+                    "entry_date"
+                ].tz_localize(config["Market Data"]["timezone"])
 
                 trade_data["order_specification"] = trade_data[
                     "order_specification"
@@ -219,7 +218,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         "entry_price": "Entry price",
         "optional_tactic": "Tactic",
         "optional_entry_reason": "Entry reason",
-        "exit_date": "Exit date",
         "exit_time": "Exit time",
         "exit_price": "Exit price",
         "optional_exit_reason": "Exit reason",
@@ -678,7 +676,7 @@ def prepare_parameters(config, formalized, trade_data, result, style):
         trade_data["exit_price"]
     ):
         timestamps["exit"] = create_timestamp(
-            trade_data["exit_date"], trade_data["exit_time"]
+            trade_data["entry_date"], trade_data["exit_time"]
         )
         prices["exit"] = trade_data["exit_price"]
         if result > 0:
@@ -971,7 +969,7 @@ def add_text(
     notes = (
         "\n\n"
         + "\n".join(
-            f"{index + 1}. {value}" for index, value in enumerate(note_series)
+            f"{index + 1}. {note}" for index, note in enumerate(note_series)
         )
         if not note_series.empty
         else ""
