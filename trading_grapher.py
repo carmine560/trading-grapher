@@ -613,7 +613,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
             f"Trade {trade_data['optional_number']}"
             f" for {trade_data['symbol']}"
             f" using {trade_data['order_specification'].title()}"
-            f"{f'—{tactic.title()}' if tactic else ''}\n"
+            f"{f'—{tactic.title()}' if pd.notna(tactic) else ''}\n"
             f"on {trade_data['entry_date'].strftime(full_date_format)}"
             f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}",
             pd.Series(notes).dropna(),
