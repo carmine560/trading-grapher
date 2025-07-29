@@ -354,7 +354,6 @@ def save_market_data(config, trade_data, market_data_path):
             symbol_data = yfinance.Ticker(
                 f"{trade_data['symbol']}"
                 f"{config['Market Data']['exchange_suffix']}"
-                # TODO: Make configurable.
             ).history(interval="1m", period=f"{PERIOD_IN_DAYS}d")
         except Exception as e:
             print(e)
