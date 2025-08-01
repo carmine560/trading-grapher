@@ -13,10 +13,10 @@ import numpy as np
 import pandas as pd
 import yfinance
 
-import configuration
-import data_utilities
-import file_utilities
-import indicators
+from shared_utilities import configuration
+from shared_utilities import data_utilities
+from shared_utilities import file_utilities
+from shared_utilities import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
