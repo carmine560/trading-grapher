@@ -16,7 +16,7 @@ import yfinance
 from shared_utilities import configuration
 from shared_utilities import data_utilities
 from shared_utilities import file_utilities
-from shared_utilities import indicators
+import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
