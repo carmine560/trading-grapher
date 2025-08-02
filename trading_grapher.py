@@ -13,9 +13,7 @@ import numpy as np
 import pandas as pd
 import yfinance
 
-from shared_utilities import configuration
-from shared_utilities import data_utilities
-from shared_utilities import file_utilities
+from core_utilities import configuration, data_utilities, file_utilities
 import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
