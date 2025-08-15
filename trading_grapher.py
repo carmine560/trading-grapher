@@ -99,7 +99,7 @@ def main():
                     key, value = configuration.evaluate_value(
                         config["Styles"][option]
                     )
-                    if value in trade_data.get(key):
+                    if value in trade_data.get(key, []):
                         style_name = option
                         break
 
