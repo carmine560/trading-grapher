@@ -50,7 +50,9 @@ Next, configure the columns of the trading journal:
 ```
 
 The `~/.config/trading-grapher/trading_grapher.ini` configuration file stores
-the configurations above. Then, execute:
+the configurations above. The `interval` option in the `[Market Data]` section
+controls the bar interval (1m, 2m, or 5m) used for historical OHLCV data and
+chart rendering. Then, execute:
 
 ``` shell
 ./trading_grapher.py [%Y-%m-%d ...]
