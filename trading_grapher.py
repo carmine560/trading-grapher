@@ -42,6 +42,12 @@ VOLUME = "Volume"
 DATE_FORMAT = "%b %-d"
 TIME_FORMAT = "%-H:%M"
 
+INTERVALS = {
+    "1m": {"yfinance": "1m", "freq": "1min", "minutes": 1},
+    "2m": {"yfinance": "2m", "freq": "2min", "minutes": 2},
+    "5m": {"yfinance": "5m", "freq": "5min", "minutes": 5},
+}
+
 
 def main():
     """Parse trade data, save market data, plot charts, and check charts."""
@@ -205,6 +211,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         "delay": "20",
         "timezone": "Asia/Tokyo",
         "exchange_suffix": ".T",
+        "interval": "1m",
     }
 
     config["Trading Journal"] = {
@@ -318,6 +325,22 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
         sys.exit()
 
 
+def _validate_interval(interval):
+    """Return 'interval' if it is supported, otherwise exit with an error."""
+    if interval not in INTERVALS:
+        print(
+            f"Invalid interval '{interval}'."
+            f" Supported values: {', '.join(sorted(INTERVALS))}"
+        )
+        sys.exit(1)
+    return interval
+
+
+def _get_interval_minutes(interval):
+    """Return the width of 'interval' in minutes (e.g., 5)."""
+    return INTERVALS[interval]["minutes"]
+
+
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
     PERIOD_IN_DAYS = 5
@@ -348,11 +371,15 @@ def save_market_data(config, trade_data, market_data_path):
     ):
         return
     else:
+        interval = _validate_interval(config["Market Data"]["interval"])
+        freq = INTERVALS[interval]["freq"]
+        bar_timedelta = pd.Timedelta(minutes=_get_interval_minutes(interval))
+
         try:
             symbol_data = yfinance.Ticker(
                 f"{trade_data['symbol']}"
                 f"{config['Market Data']['exchange_suffix']}"
-            ).history(interval="1m", period=f"{PERIOD_IN_DAYS}d")
+            ).history(interval=interval, period=f"{PERIOD_IN_DAYS}d")
         except Exception as e:
             print(e)
             sys.exit(1)
@@ -388,7 +415,7 @@ def save_market_data(config, trade_data, market_data_path):
                 trade_data["entry_date"],
                 config["Market Data"]["morning_session_end"],
             )
-            end -= pd.Timedelta(minutes=1)
+            end -= bar_timedelta
         else:
             start = create_timestamp(
                 trade_data["entry_date"], config["Market Data"]["opening_time"]
@@ -396,11 +423,11 @@ def save_market_data(config, trade_data, market_data_path):
             end = create_timestamp(
                 trade_data["entry_date"], config["Market Data"]["closing_time"]
             )
-            end -= pd.Timedelta(minutes=1)
+            end -= bar_timedelta
 
         formalized = pd.DataFrame(
             symbol_data,
-            index=pd.date_range(start, end, freq="min"),
+            index=pd.date_range(start, end, freq=freq),
             columns=(OPEN, HIGH, LOW, CLOSE, VOLUME),
         )
         formalized.index.name = DATETIME
@@ -413,8 +440,8 @@ def save_market_data(config, trade_data, market_data_path):
             end = create_timestamp(
                 trade_data["entry_date"], config["Market Data"]["opening_time"]
             )
-            end -= pd.Timedelta(minutes=1)
-            exclusion = pd.date_range(start=start, end=end, freq="min")
+            end -= bar_timedelta
+            exclusion = pd.date_range(start=start, end=end, freq=freq)
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
         else:
             start = create_timestamp(
@@ -425,8 +452,8 @@ def save_market_data(config, trade_data, market_data_path):
                 trade_data["entry_date"],
                 config["Market Data"]["afternoon_session_start"],
             )
-            end -= pd.Timedelta(minutes=1)
-            exclusion = pd.date_range(start=start, end=end, freq="min")
+            end -= bar_timedelta
+            exclusion = pd.date_range(start=start, end=end, freq=freq)
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
 
         if formalized.isna().values.all():
@@ -479,10 +506,12 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         add_emas(config, formalized, addplot, style)
     if config["MACD"].getboolean("is_added"):
         panel = add_macd(config, formalized, panel, addplot, style)
+    stochastics_panel = None
     if config["Stochastics"].getboolean("is_added"):
-        panel = stochastics_panel = add_stochastics(
-            config, formalized, panel, addplot, style
-        )
+        previous_panel = panel
+        panel = add_stochastics(config, formalized, panel, addplot, style)
+        if panel != previous_panel:
+            stochastics_panel = panel
     if config["Volume"].getboolean("is_added"):
         panel += 1
 
@@ -538,11 +567,18 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         config["Active Trading Hours"].getboolean("is_added"),
     )
 
-    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 30))
+    interval = _validate_interval(config["Market Data"]["interval"])
+    major_tick_step = 30 / _get_interval_minutes(interval)
+    minor_tick_step = 10 / _get_interval_minutes(interval)
+    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
     if config["Minor X-ticks"].getboolean("is_added"):
-        add_minor_xticks(axlist, style["custom_style"]["minor_grid_alpha"])
+        add_minor_xticks(
+            axlist,
+            style["custom_style"]["minor_grid_alpha"],
+            minor_tick_step,
+        )
 
-    if config["Stochastics"].getboolean("is_added"):
+    if stochastics_panel is not None:
         axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
 
     if (
@@ -698,31 +734,15 @@ def create_timestamp(date, time):
 
 def add_emas(config, formalized, addplot, style):
     """Add exponential moving average plots to the existing plots."""
-    addplot.extend(
-        [
-            mpf.make_addplot(
-                indicators.ema(
-                    formalized[CLOSE], int(config["EMA"]["short_term_period"])
-                ),
-                color=style["mavcolors"][0],
-                width=0.8,
-            ),
-            mpf.make_addplot(
-                indicators.ema(
-                    formalized[CLOSE], int(config["EMA"]["medium_term_period"])
-                ),
-                color=style["mavcolors"][1],
-                width=0.8,
-            ),
-            mpf.make_addplot(
-                indicators.ema(
-                    formalized[CLOSE], int(config["EMA"]["long_term_period"])
-                ),
-                color=style["mavcolors"][2],
-                width=0.8,
-            ),
-        ]
-    )
+    periods_and_colors = [
+        (config["EMA"]["short_term_period"], style["mavcolors"][0]),
+        (config["EMA"]["medium_term_period"], style["mavcolors"][1]),
+        (config["EMA"]["long_term_period"], style["mavcolors"][2]),
+    ]
+    for period, color in periods_and_colors:
+        series = indicators.ema(formalized[CLOSE], int(period))
+        if series.notna().any():
+            addplot.append(mpf.make_addplot(series, color=color, width=0.8))
 
 
 def add_macd(config, formalized, panel, addplot, style, ma="ema"):
@@ -744,6 +764,12 @@ def add_macd(config, formalized, panel, addplot, style, ma="ema"):
 
     signal = macd.ewm(span=int(config["MACD"]["signal_period"])).mean()
     histogram = macd - signal
+
+    # Skip if 'macd' (and related series) is all-NaN; mplfinance crashes
+    # otherwise.
+    if not macd.notna().any():
+        return panel
+
     panel += 1
 
     addplot.extend(
@@ -793,14 +819,24 @@ def add_stochastics(config, formalized, panel, addplot, style):
         d=int(config["Stochastics"]["d_period"]),
         smooth_k=int(config["Stochastics"]["smooth_k_period"]),
     )
-    if df.k.dropna().empty:
-        df.k.fillna(50.0, inplace=True)
-    if df.d.dropna().empty:
-        df.d.fillna(50.0, inplace=True)
 
-    formalized["k"] = pd.Series(dtype="float")
-    formalized["d"] = pd.Series(dtype="float")
-    formalized.update(df)
+    # Initialize 'k' and 'd' with NaN, then fill where data exists.
+    formalized["k"] = np.nan
+    formalized["d"] = np.nan
+    formalized.loc[df.index, "k"] = df["k"]
+    formalized.loc[df.index, "d"] = df["d"]
+
+    # Skip if both 'k' and 'd' are all-NaN; mplfinance crashes otherwise.
+    k_has_data = formalized["k"].notna().any()
+    d_has_data = formalized["d"].notna().any()
+    if not k_has_data and not d_has_data:
+        return panel
+
+    if not k_has_data:
+        formalized["k"] = 50.0
+    if not d_has_data:
+        formalized["d"] = 50.0
+
     panel += 1
 
     addplot.extend(
@@ -825,9 +861,11 @@ def add_stochastics(config, formalized, panel, addplot, style):
     return panel
 
 
-def add_minor_xticks(axlist, minor_grid_alpha):
+def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
     """Add minor x-ticks and their grid between panels."""
-    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), 10), minor=True)
+    axlist[0].set_xticks(
+        np.arange(*axlist[0].get_xlim(), minor_tick_step), minor=True
+    )
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
@@ -891,7 +929,7 @@ def add_tooltips(
 ):
     """Add tooltips to the specified axes."""
     axlist[0].text(
-        0,
+        0.0,
         price,
         string,
         c=color,
@@ -937,7 +975,7 @@ def add_text(
     bottom, top = axlist[last_primary_axes].get_ylim()
     height = top - bottom
 
-    x_offset = 1
+    x_offset = 0.0
     panel_offset_factors = {0: 0, 2: 2.5 * height, 4: height, 6: 2 * height}
     panel_offset_factor = panel_offset_factors.get(last_primary_axes)
     y_offset_ratios = {
@@ -957,7 +995,7 @@ def add_text(
         weight="bold",
         bbox=dict(
             alpha=bbox_alpha,
-            boxstyle="square, pad=0.1",
+            boxstyle="square, pad=0.0",
             ec="none",
             fc=bbox_color,
         ),
@@ -981,7 +1019,7 @@ def add_text(
             zorder=1,
             bbox=dict(
                 alpha=bbox_alpha,
-                boxstyle="square, pad=0.1",
+                boxstyle="square, pad=0.0",
                 ec="none",
                 fc=bbox_color,
             ),
