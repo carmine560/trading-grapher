@@ -320,6 +320,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
         configuration.check_config_changes(
             configure(config_path, can_interpolate=False, can_override=False),
             config_path,
+            excluded_sections=("Trading Journal",),
             backup_parameters=backup_parameters,
         )
         sys.exit()
