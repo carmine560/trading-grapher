@@ -205,6 +205,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
     }
     config["Market Data"] = {
         "opening_time": "09:00:00",
+        "has_midday_break": "True",
         "morning_session_end": "11:30:00",
         "afternoon_session_start": "12:30:00",
         "closing_time": "15:30:00",
@@ -250,6 +251,9 @@ def configure(config_path, can_interpolate=True, can_override=True):
         "short_term_period": "5",
         "medium_term_period": "25",
         "long_term_period": "75",
+    }
+    config["VWAP"] = {
+        "is_added": "True",
     }
     config["MACD"] = {
         "is_added": "True",
@@ -505,6 +509,8 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
 
     if config["EMA"].getboolean("is_added"):
         add_emas(config, formalized, addplot, style)
+    if config["VWAP"].getboolean("is_added"):
+        add_vwap(config, formalized, addplot, style)
     if config["MACD"].getboolean("is_added"):
         panel = add_macd(config, formalized, panel, addplot, style)
     stochastics_panel = None
@@ -744,6 +750,25 @@ def add_emas(config, formalized, addplot, style):
         series = indicators.ema(formalized[CLOSE], int(period))
         if series.notna().any():
             addplot.append(mpf.make_addplot(series, color=color, width=0.8))
+
+
+def add_vwap(config, formalized, addplot, style):
+    """Add volume-weighted average price plot to the existing plots."""
+    series = indicators.vwap(
+        formalized[HIGH],
+        formalized[LOW],
+        formalized[CLOSE],
+        formalized[VOLUME],
+        morning_session_end=(
+            config["Market Data"]["morning_session_end"]
+            if config["Market Data"].getboolean("has_midday_break")
+            else None
+        ),
+    )
+    color = style["mavcolors"][3]
+
+    if series.notna().any():
+        addplot.append(mpf.make_addplot(series, color=color, width=0.8))
 
 
 def add_macd(config, formalized, panel, addplot, style, ma="ema"):

@@ -95,6 +95,13 @@ trade](examples/fluorite.png)
 ![A “opal” style chart showing the result of a specific stock day
 trade](examples/opal.png)
 
+## Known Issues
+
+  * Support for non-Japanese stocks has not been tested.
+  * Yahoo Finance’s historical data on Japanese stocks often lacks OHLCV data
+    from the first several minutes after opening. In such cases, indicator
+    values may be invalid.
+
 ## License ##
 
 This project is licensed under the [MIT License](LICENSE). The `.gitignore`
