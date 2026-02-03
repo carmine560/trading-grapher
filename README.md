@@ -1,11 +1,11 @@
 # trading-grapher #
 
-<!-- Python script that visualizes the results of stock day trading in a
-spreadsheet using mplfinance based on historical data from Yahoo Finance -->
+<!-- Python script that visualizes the results of Japanese stock day trading in
+a spreadsheet using mplfinance and historical data from Yahoo Finance -->
 
-The `trading_grapher.py` Python script visualizes the results of stock day
-trading in a spreadsheet, as well as the MACD and the stochastics, using the
-`mplfinance` package based on historical data from [Yahoo
+The `trading_grapher.py` Python script visualizes the results of Japanese stock
+day trading in a spreadsheet, as well as the MACD and the stochastics, using
+the `mplfinance` package based on historical data from [Yahoo
 Finance](https://finance.yahoo.com/).
 
 ## Prerequisites ##
@@ -95,9 +95,8 @@ trade](examples/fluorite.png)
 ![A “opal” style chart showing the result of a specific stock day
 trade](examples/opal.png)
 
-## Known Issues
+## Known Issue
 
-  * Support for non-Japanese stocks has not been tested.
   * Yahoo Finance’s historical data on Japanese stocks often lacks OHLCV data
     from the first several minutes after opening. In such cases, indicator
     values may be invalid.
