@@ -897,6 +897,13 @@ def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
 
 
+def get_x(index, timestamp, method="ffill"):
+    """Map a real timestamp to a bar index for plotting."""
+    if timestamp is None or pd.isna(timestamp):
+        return None
+    return index.get_indexer([timestamp], method=method)[0]
+
+
 def add_vertical_elements(
     formalized,
     timestamps,
@@ -918,8 +925,8 @@ def add_vertical_elements(
                 axlist[index].set_ylim(*axlist[index].get_ylim())
                 axlist[index].fill_betweenx(
                     axlist[index].get_ylim(),
-                    formalized.index.get_loc(timestamps["start"]),
-                    formalized.index.get_loc(timestamps["end"]),
+                    get_x(formalized.index, timestamps["start"]),
+                    get_x(formalized.index, timestamps["end"]),
                     facecolor=style["custom_style"][
                         "active_trading_hours_color"
                     ],
@@ -931,7 +938,7 @@ def add_vertical_elements(
                     color=colors["entry"],
                     linestyle=style["custom_style"]["entry_line"],
                     linewidth=1,
-                    x=formalized.index.get_loc(timestamps["entry"]),
+                    x=get_x(formalized.index, timestamps["entry"]),
                 )
             if timestamps["exit"]:
                 axlist[index].axvline(
@@ -939,7 +946,7 @@ def add_vertical_elements(
                     color=colors["exit"],
                     linestyle=style["custom_style"]["exit_line"],
                     linewidth=1,
-                    x=formalized.index.get_loc(timestamps["exit"]),
+                    x=get_x(formalized.index, timestamps["exit"]),
                 )
 
 
@@ -975,7 +982,7 @@ def add_tooltips(
         bottom, _ = axlist[last_primary_axes].get_ylim()
 
         axlist[last_primary_axes].text(
-            formalized.index.get_loc(timestamp),
+            get_x(formalized.index, timestamp),
             bottom,
             timestamp.strftime(TIME_FORMAT),
             c=color,
