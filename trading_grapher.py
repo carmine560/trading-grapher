@@ -47,6 +47,7 @@ INTERVALS = {
     "2m": {"yfinance": "2m", "freq": "2min", "minutes": 2},
     "5m": {"yfinance": "5m", "freq": "5min", "minutes": 5},
 }
+HALF_BAR_WIDTH = 0.5
 
 
 def main():
@@ -330,7 +331,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
         sys.exit()
 
 
-def _validate_interval(interval):
+def validate_interval(interval):
     """Return 'interval' if it is supported, otherwise exit with an error."""
     if interval not in INTERVALS:
         print(
@@ -341,7 +342,7 @@ def _validate_interval(interval):
     return interval
 
 
-def _get_interval_minutes(interval):
+def get_interval_minutes(interval):
     """Return the width of 'interval' in minutes (e.g., 5)."""
     return INTERVALS[interval]["minutes"]
 
@@ -376,9 +377,9 @@ def save_market_data(config, trade_data, market_data_path):
     ):
         return
     else:
-        interval = _validate_interval(config["Market Data"]["interval"])
+        interval = validate_interval(config["Market Data"]["interval"])
         freq = INTERVALS[interval]["freq"]
-        bar_timedelta = pd.Timedelta(minutes=_get_interval_minutes(interval))
+        bar_timedelta = pd.Timedelta(minutes=get_interval_minutes(interval))
 
         try:
             symbol_data = yfinance.Ticker(
@@ -574,9 +575,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         config["Active Trading Hours"].getboolean("is_added"),
     )
 
-    interval = _validate_interval(config["Market Data"]["interval"])
-    major_tick_step = 30 / _get_interval_minutes(interval)
-    minor_tick_step = 10 / _get_interval_minutes(interval)
+    interval = validate_interval(config["Market Data"]["interval"])
+    major_tick_step = 30 / get_interval_minutes(interval)
+    minor_tick_step = 10 / get_interval_minutes(interval)
     axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
     if config["Minor X-ticks"].getboolean("is_added"):
         add_minor_xticks(
@@ -659,6 +660,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
             pd.Series(notes).dropna(),
             style["facecolor"],
             style["custom_style"]["text_bbox_alpha"],
+            interval,
         )
 
     fig.savefig(
@@ -925,8 +927,10 @@ def add_vertical_elements(
                 axlist[index].set_ylim(*axlist[index].get_ylim())
                 axlist[index].fill_betweenx(
                     axlist[index].get_ylim(),
-                    get_x(formalized.index, timestamps["start"]),
-                    get_x(formalized.index, timestamps["end"]),
+                    get_x(formalized.index, timestamps["start"])
+                    - HALF_BAR_WIDTH,
+                    get_x(formalized.index, timestamps["end"])
+                    + HALF_BAR_WIDTH,
                     facecolor=style["custom_style"][
                         "active_trading_hours_color"
                     ],
@@ -962,7 +966,7 @@ def add_tooltips(
 ):
     """Add tooltips to the specified axes."""
     axlist[0].text(
-        0.0,
+        0.0 - HALF_BAR_WIDTH,
         price,
         string,
         c=color,
@@ -999,7 +1003,13 @@ def add_tooltips(
 
 
 def add_text(
-    axlist, default_y_offset_ratio, title, note_series, bbox_color, bbox_alpha
+    axlist,
+    default_y_offset_ratio,
+    title,
+    note_series,
+    bbox_color,
+    bbox_alpha,
+    interval,
 ):
     """Add a title and notes to the last primary axes."""
     # Use the last panel to prevent other panels from overwriting the
@@ -1008,7 +1018,7 @@ def add_text(
     bottom, top = axlist[last_primary_axes].get_ylim()
     height = top - bottom
 
-    x_offset = 0.0
+    x_offset = 1.0 / get_interval_minutes(interval) - HALF_BAR_WIDTH
     panel_offset_factors = {0: 0, 2: 2.5 * height, 4: height, 6: 2 * height}
     panel_offset_factor = panel_offset_factors.get(last_primary_axes)
     y_offset_ratios = {
