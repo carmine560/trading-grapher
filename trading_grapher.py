@@ -43,9 +43,10 @@ DATE_FORMAT = "%b %-d"
 TIME_FORMAT = "%-H:%M"
 
 INTERVALS = {
-    "1m": {"yfinance": "1m", "freq": "1min", "minutes": 1},
-    "2m": {"yfinance": "2m", "freq": "2min", "minutes": 2},
-    "5m": {"yfinance": "5m", "freq": "5min", "minutes": 5},
+    "1m": {"freq": "1min", "minutes": 1},
+    "2m": {"freq": "2min", "minutes": 2},
+    "3m": {"freq": "3min", "minutes": 3},
+    "5m": {"freq": "5min", "minutes": 5},
 }
 HALF_BAR_WIDTH = 0.5
 
@@ -377,7 +378,7 @@ def save_market_data(config, trade_data, market_data_path):
     ):
         return
     else:
-        interval = validate_interval(config["Market Data"]["interval"])
+        interval = "1m"
         freq = INTERVALS[interval]["freq"]
         bar_timedelta = pd.Timedelta(minutes=get_interval_minutes(interval))
 
@@ -473,6 +474,42 @@ def save_market_data(config, trade_data, market_data_path):
             sys.exit(1)
 
 
+def resample_ohlcv(config, df, interval):
+    """Resample 1-minute OHLCV to N-minute bars within exchange hours."""
+    if get_interval_minutes(interval) == 1:
+        return df
+
+    resampled = df.resample(INTERVALS[interval]["freq"]).agg(
+        {
+            OPEN: "first",
+            HIGH: "max",
+            LOW: "min",
+            CLOSE: "last",
+            VOLUME: "sum",
+        }
+    )
+
+    index = resampled.index
+    trading_mask = np.zeros(len(index), dtype=bool)
+    trading_mask[
+        index.indexer_between_time(
+            config["Market Data"]["opening_time"],
+            config["Market Data"]["morning_session_end"],
+            include_end=False,
+        )
+    ] = True
+    trading_mask[
+        index.indexer_between_time(
+            config["Market Data"]["afternoon_session_start"],
+            config["Market Data"]["closing_time"],
+            include_end=False,
+        )
+    ] = True
+    resampled = resampled.loc[trading_mask]
+
+    return resampled
+
+
 def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     """Plot trading charts with entry and exit points, and indicators."""
     try:
@@ -482,6 +519,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     except Exception as e:
         print(e)
         sys.exit(1)
+
+    interval = validate_interval(config["Market Data"]["interval"])
+    formalized = resample_ohlcv(config, formalized, interval)
 
     result = 0
     if not pd.isna(trade_data["entry_price"]) and not pd.isna(
@@ -575,9 +615,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         config["Active Trading Hours"].getboolean("is_added"),
     )
 
-    interval = validate_interval(config["Market Data"]["interval"])
-    major_tick_step = 30 / get_interval_minutes(interval)
-    minor_tick_step = 10 / get_interval_minutes(interval)
+    minutes = get_interval_minutes(interval)
+    major_tick_step = 30 / minutes
+    minor_tick_step = 10 / minutes
     axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
     if config["Minor X-ticks"].getboolean("is_added"):
         add_minor_xticks(
