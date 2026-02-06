@@ -348,6 +348,18 @@ def get_interval_minutes(interval):
     return INTERVALS[interval]["minutes"]
 
 
+def create_timestamp(date, time):
+    """Create a pandas Timestamp by adding a time duration to a date."""
+    if pd.isna(date):
+        return pd.NaT
+    else:
+        return date + (
+            pd.Timedelta(time)
+            if isinstance(time, str)
+            else pd.Timedelta(str(time))
+        )
+
+
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
     PERIOD_IN_DAYS = 5
@@ -769,18 +781,6 @@ def prepare_parameters(config, formalized, trade_data, result, style):
     return (timestamps, prices, colors)
 
 
-def create_timestamp(date, time):
-    """Create a pandas Timestamp by adding a time duration to a date."""
-    if pd.isna(date):
-        return pd.NaT
-    else:
-        return date + (
-            pd.Timedelta(time)
-            if isinstance(time, str)
-            else pd.Timedelta(str(time))
-        )
-
-
 def add_emas(config, formalized, addplot, style):
     """Add exponential moving average plots to the existing plots."""
     periods_and_colors = [
@@ -939,13 +939,6 @@ def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
 
 
-def get_x(index, timestamp, method="ffill"):
-    """Map a real timestamp to a bar index for plotting."""
-    if timestamp is None or pd.isna(timestamp):
-        return None
-    return index.get_indexer([timestamp], method=method)[0]
-
-
 def add_vertical_elements(
     formalized,
     timestamps,
@@ -1040,6 +1033,13 @@ def add_tooltips(
                 fc=bbox_color,
             ),
         )
+
+
+def get_x(index, timestamp, method="ffill"):
+    """Map a real timestamp to a bar index for plotting."""
+    if timestamp is None or pd.isna(timestamp):
+        return None
+    return index.get_indexer([timestamp], method=method)[0]
 
 
 def add_text(
