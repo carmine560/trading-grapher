@@ -50,7 +50,7 @@ Next, configure the columns of the trading journal:
 ```
 
 The `~/.config/trading-grapher/trading_grapher.ini` configuration file stores
-the configurations above. The `interval` option in the `[Market Data]` section
+the configurations above. The `interval` option in the `[Chart]` section
 controls the bar interval (`1m`, `2m`, `3m`, or `5m`) used for chart rendering.
 Then, execute:
 

@@ -214,7 +214,6 @@ def configure(config_path, can_interpolate=True, can_override=True):
         "delay": "20",
         "timezone": "Asia/Tokyo",
         "exchange_suffix": ".T",
-        "interval": "1m",
     }
 
     config["Trading Journal"] = {
@@ -236,6 +235,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
         config["Trading Journal"][f"optional_note_{index}"] = f"Note {index}"
 
     config["Chart"] = {
+        "interval": "1m",
         "width": "1280",
         "height": "720",
         "scale_padding_top": "0.0",
@@ -532,7 +532,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         print(e)
         sys.exit(1)
 
-    interval = validate_interval(config["Market Data"]["interval"])
+    interval = validate_interval(config["Chart"]["interval"])
     formalized = resample_ohlcv(config, formalized, interval)
 
     result = 0
