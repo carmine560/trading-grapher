@@ -51,6 +51,9 @@ INTERVALS = {
 HALF_BAR_WIDTH = 0.5
 
 
+# Entry Point
+
+
 def main():
     """Parse trade data, save market data, plot charts, and check charts."""
     args = get_arguments()
@@ -139,6 +142,9 @@ def main():
             r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
             trading_journal[config["Trading Journal"]["optional_chart_file"]],
         )
+
+
+# CLI and Configuration
 
 
 def get_arguments():
@@ -332,6 +338,9 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
         sys.exit()
 
 
+# Time and Interval Utilities
+
+
 def validate_interval(interval):
     """Return 'interval' if it is supported, otherwise exit with an error."""
     if interval not in INTERVALS:
@@ -358,6 +367,9 @@ def create_timestamp(date, time):
             if isinstance(time, str)
             else pd.Timedelta(str(time))
         )
+
+
+# Market Data Acquisition and Preparation
 
 
 def save_market_data(config, trade_data, market_data_path):
@@ -522,6 +534,164 @@ def resample_ohlcv(config, df, interval):
     return resampled
 
 
+# Plot Chart Orchestration
+
+
+def calculate_trade_result(trade_data):
+    """Return the profit or loss for a trade based on order type and prices."""
+    if pd.isna(trade_data["entry_price"]) or pd.isna(trade_data["exit_price"]):
+        return 0
+
+    if "long" in trade_data["order_specification"]:
+        return trade_data["exit_price"] - trade_data["entry_price"]
+    if "short" in trade_data["order_specification"]:
+        return trade_data["entry_price"] - trade_data["exit_price"]
+    return 0
+
+
+def prepare_parameters(config, formalized, trade_data, result, style):
+    """Prepare timestamps, prices, and colors for entry and exit points."""
+    timestamps = {
+        "start": create_timestamp(
+            trade_data["entry_date"],
+            config["Active Trading Hours"]["start_time"],
+        ),
+        "end": create_timestamp(
+            trade_data["entry_date"],
+            config["Active Trading Hours"]["end_time"],
+        ),
+        "entry": None,
+        "exit": None,
+    }
+    if isinstance(timestamps["end"], pd.Timestamp):
+        timestamps["end"] = min(formalized.tail(1).index[0], timestamps["end"])
+
+    prices = {"closing": 0.0, "opening": 0.0, "entry": 0.0, "exit": 0.0}
+    colors = {
+        "closing": style["rc"]["axes.edgecolor"],
+        "opening": style["rc"]["axes.edgecolor"],
+        "entry": style["custom_style"]["neutral_color"],
+        "exit": style["custom_style"]["neutral_color"],
+    }
+
+    previous = formalized[formalized.index < trade_data["entry_date"]]
+    current = formalized[trade_data["entry_date"] <= formalized.index]
+
+    if previous.notnull().values.any():
+        prices["closing"] = previous.dropna().tail(1)[CLOSE].iloc[0]
+        prices["opening"] = current.dropna().head(1)[OPEN].iloc[0]
+
+    # nan is not recognized as False in a boolean context.
+    if not pd.isna(trade_data["entry_time"]) and not pd.isna(
+        trade_data["entry_price"]
+    ):
+        timestamps["entry"] = create_timestamp(
+            trade_data["entry_date"], trade_data["entry_time"]
+        )
+        prices["entry"] = trade_data["entry_price"]
+
+    if not pd.isna(trade_data["exit_time"]) and not pd.isna(
+        trade_data["exit_price"]
+    ):
+        timestamps["exit"] = create_timestamp(
+            trade_data["entry_date"], trade_data["exit_time"]
+        )
+        prices["exit"] = trade_data["exit_price"]
+        if result > 0:
+            colors["exit"] = style["custom_style"]["profit_color"]
+        elif result < 0:
+            colors["exit"] = style["custom_style"]["loss_color"]
+
+    return (timestamps, prices, colors)
+
+
+def add_indicators(config, formalized, addplot, style, panel):
+    """Add enabled technical indicators to the plot and manage panels."""
+    if config["EMA"].getboolean("is_added"):
+        add_emas(config, formalized, addplot, style)
+
+    if config["VWAP"].getboolean("is_added"):
+        add_vwap(config, formalized, addplot, style)
+
+    if config["MACD"].getboolean("is_added"):
+        panel = add_macd(config, formalized, panel, addplot, style)
+
+    stochastics_panel = None
+    if config["Stochastics"].getboolean("is_added"):
+        previous_panel = panel
+        panel = add_stochastics(config, formalized, panel, addplot, style)
+        if panel != previous_panel:
+            stochastics_panel = panel
+
+    if config["Volume"].getboolean("is_added"):
+        panel += 1
+
+    return panel, stochastics_panel
+
+
+def add_all_tooltips(
+    config,
+    axlist,
+    formalized,
+    trade_data,
+    prices,
+    timestamps,
+    result,
+    percentage_change,
+    style,
+    colors,
+):
+    """Add all enabled tooltips for prices, entry, and exit to the chart."""
+    if not config["Tooltips"].getboolean("is_added"):
+        return
+
+    if (
+        prices["closing"]
+        and prices["opening"] != trade_data["entry_price"]
+        and prices["opening"] != trade_data["exit_price"]
+    ):
+        delta = prices["opening"] - prices["closing"]
+        add_tooltips(
+            axlist,
+            prices["opening"],
+            f"{delta:.1f}, {100 * delta / prices['closing']:.2f}%",
+            style["custom_style"]["tooltip_color"],
+            colors["opening"],
+            style["custom_style"]["tooltip_bbox_alpha"],
+        )
+
+    if not pd.isna(trade_data["entry_price"]):
+        acronym = data_utilities.create_acronym(
+            trade_data["optional_entry_reason"]
+        )
+        add_tooltips(
+            axlist,
+            trade_data["entry_price"],
+            acronym or "",
+            style["custom_style"]["tooltip_color"],
+            colors["entry"],
+            style["custom_style"]["tooltip_bbox_alpha"],
+            formalized=formalized,
+            timestamp=timestamps["entry"],
+        )
+
+    if not pd.isna(trade_data["exit_price"]):
+        acronym = data_utilities.create_acronym(
+            trade_data["optional_exit_reason"]
+        )
+        add_tooltips(
+            axlist,
+            trade_data["exit_price"],
+            f"{f'{acronym}, ' if acronym else ''}"
+            f"{result:.1f}, {percentage_change:.2f}%",
+            style["custom_style"]["tooltip_color"],
+            colors["exit"],
+            style["custom_style"]["tooltip_bbox_alpha"],
+            formalized=formalized,
+            timestamp=timestamps["exit"],
+        )
+
+
 def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     """Plot trading charts with entry and exit points, and indicators."""
     try:
@@ -535,19 +705,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     interval = validate_interval(config["Chart"]["interval"])
     formalized = resample_ohlcv(config, formalized, interval)
 
-    result = 0
-    if not pd.isna(trade_data["entry_price"]) and not pd.isna(
-        trade_data["exit_price"]
-    ):
-        result = (
-            trade_data["exit_price"] - trade_data["entry_price"]
-            if "long" in trade_data["order_specification"]
-            else (
-                trade_data["entry_price"] - trade_data["exit_price"]
-                if "short" in trade_data["order_specification"]
-                else 0
-            )
-        )
+    result = calculate_trade_result(trade_data)
 
     addplot = []
     panel = 0
@@ -560,20 +718,9 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         else trade_data["optional_percentage_change"]
     )
 
-    if config["EMA"].getboolean("is_added"):
-        add_emas(config, formalized, addplot, style)
-    if config["VWAP"].getboolean("is_added"):
-        add_vwap(config, formalized, addplot, style)
-    if config["MACD"].getboolean("is_added"):
-        panel = add_macd(config, formalized, panel, addplot, style)
-    stochastics_panel = None
-    if config["Stochastics"].getboolean("is_added"):
-        previous_panel = panel
-        panel = add_stochastics(config, formalized, panel, addplot, style)
-        if panel != previous_panel:
-            stochastics_panel = panel
-    if config["Volume"].getboolean("is_added"):
-        panel += 1
+    panel, stochastics_panel = add_indicators(
+        config, formalized, addplot, style, panel
+    )
 
     fig, axlist = mpf.plot(
         formalized,
@@ -641,56 +788,18 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     if stochastics_panel is not None:
         axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
 
-    if (
-        config["Tooltips"].getboolean("is_added")
-        and prices["closing"]
-        and prices["opening"] != trade_data["entry_price"]
-        and prices["opening"] != trade_data["exit_price"]
-    ):
-        delta = prices["opening"] - prices["closing"]
-        add_tooltips(
-            axlist,
-            prices["opening"],
-            f"{delta:.1f}, {100 * delta / prices['closing']:.2f}%",
-            style["custom_style"]["tooltip_color"],
-            colors["opening"],
-            style["custom_style"]["tooltip_bbox_alpha"],
-        )
-
-    if config["Tooltips"].getboolean("is_added") and not pd.isna(
-        trade_data["entry_price"]
-    ):
-        acronym = data_utilities.create_acronym(
-            trade_data["optional_entry_reason"]
-        )
-        add_tooltips(
-            axlist,
-            trade_data["entry_price"],
-            f"{acronym}" if acronym else "",
-            style["custom_style"]["tooltip_color"],
-            colors["entry"],
-            style["custom_style"]["tooltip_bbox_alpha"],
-            formalized=formalized,
-            timestamp=timestamps["entry"],
-        )
-
-    if config["Tooltips"].getboolean("is_added") and not pd.isna(
-        trade_data["exit_price"]
-    ):
-        acronym = data_utilities.create_acronym(
-            trade_data["optional_exit_reason"]
-        )
-        add_tooltips(
-            axlist,
-            trade_data["exit_price"],
-            f"{f'{acronym}, ' if acronym else ''}"
-            f"{result:.1f}, {percentage_change:.2f}%",
-            style["custom_style"]["tooltip_color"],
-            colors["exit"],
-            style["custom_style"]["tooltip_bbox_alpha"],
-            formalized=formalized,
-            timestamp=timestamps["exit"],
-        )
+    add_all_tooltips(
+        config,
+        axlist,
+        formalized,
+        trade_data,
+        prices,
+        timestamps,
+        result,
+        percentage_change,
+        style,
+        colors,
+    )
 
     if config["Text"].getboolean("is_added"):
         tactic = trade_data["optional_tactic"]
@@ -725,60 +834,7 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
     )
 
 
-def prepare_parameters(config, formalized, trade_data, result, style):
-    """Prepare timestamps, prices, and colors for entry and exit points."""
-    timestamps = {
-        "start": create_timestamp(
-            trade_data["entry_date"],
-            config["Active Trading Hours"]["start_time"],
-        ),
-        "end": create_timestamp(
-            trade_data["entry_date"],
-            config["Active Trading Hours"]["end_time"],
-        ),
-        "entry": None,
-        "exit": None,
-    }
-    if isinstance(timestamps["end"], pd.Timestamp):
-        timestamps["end"] = min(formalized.tail(1).index[0], timestamps["end"])
-
-    prices = {"closing": 0.0, "opening": 0.0, "entry": 0.0, "exit": 0.0}
-    colors = {
-        "closing": style["rc"]["axes.edgecolor"],
-        "opening": style["rc"]["axes.edgecolor"],
-        "entry": style["custom_style"]["neutral_color"],
-        "exit": style["custom_style"]["neutral_color"],
-    }
-
-    previous = formalized[formalized.index < trade_data["entry_date"]]
-    current = formalized[trade_data["entry_date"] <= formalized.index]
-
-    if previous.notnull().values.any():
-        prices["closing"] = previous.dropna().tail(1)[CLOSE].iloc[0]
-        prices["opening"] = current.dropna().head(1)[OPEN].iloc[0]
-
-    # nan is not recognized as False in a boolean context.
-    if not pd.isna(trade_data["entry_time"]) and not pd.isna(
-        trade_data["entry_price"]
-    ):
-        timestamps["entry"] = create_timestamp(
-            trade_data["entry_date"], trade_data["entry_time"]
-        )
-        prices["entry"] = trade_data["entry_price"]
-
-    if not pd.isna(trade_data["exit_time"]) and not pd.isna(
-        trade_data["exit_price"]
-    ):
-        timestamps["exit"] = create_timestamp(
-            trade_data["entry_date"], trade_data["exit_time"]
-        )
-        prices["exit"] = trade_data["exit_price"]
-        if result > 0:
-            colors["exit"] = style["custom_style"]["profit_color"]
-        elif result < 0:
-            colors["exit"] = style["custom_style"]["loss_color"]
-
-    return (timestamps, prices, colors)
+# Low-Level Plotting Primitives
 
 
 def add_emas(config, formalized, addplot, style):
