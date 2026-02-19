@@ -69,6 +69,9 @@ def main():
     charts_directory = (
         args.d[0] if args.d else config["General"]["charts_directory"]
     )
+    interval = validate_interval(
+        args.i[0] if args.i else config["Chart"]["interval"]
+    )
     has_plotted = False
 
     for date in pd.to_datetime(args.dates):
@@ -127,8 +130,9 @@ def main():
                     config,
                     trade_data,
                     market_data_path,
-                    style,
                     charts_directory,
+                    interval,
+                    style,
                 )
                 has_plotted = True
 
@@ -171,6 +175,12 @@ def get_arguments():
         " for storing historical data and charts",
         metavar="DIRECTORY",
     )
+    parser.add_argument(
+        "-i",
+        nargs=1,
+        help="specify the bar interval for chart rendering",
+        metavar="INTERVAL",
+    )
 
     file_utilities.add_launcher_options(group)
     group.add_argument(
@@ -180,6 +190,11 @@ def get_arguments():
         "-J",
         action="store_true",
         help="configure the columns of the trading journal and exit",
+    )
+    group.add_argument(
+        "-I",
+        action="store_true",
+        help="configure the bar interval and exit",
     )
     group.add_argument(
         "-S",
@@ -295,11 +310,17 @@ def configure(config_path, can_interpolate=True, can_override=True):
 def configure_exit(args, config_path, trading_path, trading_sheet):
     """Configure parameters based on command-line arguments and exit."""
     backup_parameters = {"number_of_backups": 8}
-    if any((args.G, args.J, args.S)):
+    if any((args.G, args.J, args.I, args.S)):
         config = configure(config_path, can_interpolate=False)
         for argument, (section, option, prompts, all_values) in {
             "G": ("General", None, None, None),
             "J": ("Trading Journal", None, {"value": "column"}, None),
+            "I": (
+                "Chart",
+                "interval",
+                {"value": "interval"},
+                sorted(INTERVALS),
+            ),
             "S": (
                 "Styles",
                 None,
@@ -692,7 +713,9 @@ def add_all_tooltips(
         )
 
 
-def plot_charts(config, trade_data, market_data_path, style, charts_directory):
+def plot_charts(
+    config, trade_data, market_data_path, charts_directory, interval, style
+):
     """Plot trading charts with entry and exit points, and indicators."""
     try:
         formalized = pd.read_csv(
@@ -702,13 +725,10 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         print(e)
         sys.exit(1)
 
-    interval = validate_interval(config["Chart"]["interval"])
     formalized = resample_ohlcv(config, formalized, interval)
 
     result = calculate_trade_result(trade_data)
 
-    addplot = []
-    panel = 0
     timestamps, prices, colors = prepare_parameters(
         config, formalized, trade_data, result, style
     )
@@ -718,6 +738,8 @@ def plot_charts(config, trade_data, market_data_path, style, charts_directory):
         else trade_data["optional_percentage_change"]
     )
 
+    addplot = []
+    panel = 0
     panel, stochastics_panel = add_indicators(
         config, formalized, addplot, style, panel
     )
