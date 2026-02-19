@@ -1,4 +1,4 @@
-# trading-grapher #
+# `trading-grapher`
 
 <!-- Python script that visualizes the results of Japanese stock day trading in
 a spreadsheet using mplfinance and historical data from Yahoo Finance -->
@@ -8,7 +8,7 @@ day trading in a spreadsheet, as well as the MACD and the stochastics, using
 the `mplfinance` package based on historical data from [Yahoo
 Finance](https://finance.yahoo.com/).
 
-## Prerequisites ##
+## Prerequisites
 
 `trading_grapher.py` has been tested on Debian Testing on WSL 2 and requires
 the following packages:
@@ -34,7 +34,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt -U
 ```
 
-## Usage ##
+## Usage
 
 First, configure the path to your trading journal spreadsheet, the sheet name,
 and the directory path for storing historical data and charts:
@@ -58,7 +58,7 @@ Then, execute:
 ./trading_grapher.py [%Y-%m-%d ...]
 ```
 
-### Options ###
+### Options
 
   * `-f FILE`: specify the file path to the trading journal spreadsheet
   * `-d DIRECTORY`: specify the directory path for storing historical data and
@@ -72,27 +72,27 @@ Then, execute:
   * `-S`: configure the styles based on the trade context and exit
   * `-C`: check configuration changes and exit
 
-## Styles ##
+## Styles
 
 `trading_grapher.py` provides the following style modules, which you can
 specify using the `-S` option.
 
-### `amber` ###
+### `amber`
 
 ![A “amber” style chart showing the result of a specific stock day
 trade](examples/amber.png)
 
-### `ametrine` ###
+### `ametrine`
 
 ![A “ametrine” style chart showing the result of a specific stock day
 trade](examples/ametrine.png)
 
-### `fluorite` (Default) ###
+### `fluorite` (Default)
 
 ![A “fluorite” style chart showing the result of a specific stock day
 trade](examples/fluorite.png)
 
-### `opal` ###
+### `opal`
 
 ![A “opal” style chart showing the result of a specific stock day
 trade](examples/opal.png)
@@ -103,7 +103,7 @@ trade](examples/opal.png)
     from the first several minutes after opening. In such cases, indicator
     values may be invalid.
 
-## License ##
+## License
 
 This project is licensed under the [MIT License](LICENSE). The `.gitignore`
 file is sourced from [`gitignore`](https://github.com/github/gitignore), which
