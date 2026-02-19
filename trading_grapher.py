@@ -558,7 +558,7 @@ def resample_ohlcv(config, df, interval):
 # Plot Chart Orchestration
 
 
-def calculate_trade_result(trade_data):
+def _calculate_trade_result(trade_data):
     """Return the profit or loss for a trade based on order type and prices."""
     if pd.isna(trade_data["entry_price"]) or pd.isna(trade_data["exit_price"]):
         return 0
@@ -570,7 +570,7 @@ def calculate_trade_result(trade_data):
     return 0
 
 
-def prepare_parameters(config, formalized, trade_data, result, style):
+def _prepare_parameters(config, formalized, trade_data, result, style):
     """Prepare timestamps, prices, and colors for entry and exit points."""
     timestamps = {
         "start": create_timestamp(
@@ -626,7 +626,7 @@ def prepare_parameters(config, formalized, trade_data, result, style):
     return (timestamps, prices, colors)
 
 
-def add_indicators(config, formalized, addplot, style, panel):
+def _add_indicators(config, formalized, addplot, style, panel):
     """Add enabled technical indicators to the plot and manage panels."""
     if config["EMA"].getboolean("is_added"):
         add_emas(config, formalized, addplot, style)
@@ -650,7 +650,7 @@ def add_indicators(config, formalized, addplot, style, panel):
     return panel, stochastics_panel
 
 
-def add_all_tooltips(
+def _add_all_tooltips(
     config,
     axlist,
     formalized,
@@ -727,9 +727,9 @@ def plot_charts(
 
     formalized = resample_ohlcv(config, formalized, interval)
 
-    result = calculate_trade_result(trade_data)
+    result = _calculate_trade_result(trade_data)
 
-    timestamps, prices, colors = prepare_parameters(
+    timestamps, prices, colors = _prepare_parameters(
         config, formalized, trade_data, result, style
     )
     percentage_change = (
@@ -740,7 +740,7 @@ def plot_charts(
 
     addplot = []
     panel = 0
-    panel, stochastics_panel = add_indicators(
+    panel, stochastics_panel = _add_indicators(
         config, formalized, addplot, style, panel
     )
 
@@ -810,7 +810,7 @@ def plot_charts(
     if stochastics_panel is not None:
         axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
 
-    add_all_tooltips(
+    _add_all_tooltips(
         config,
         axlist,
         formalized,
