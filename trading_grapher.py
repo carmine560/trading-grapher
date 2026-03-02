@@ -533,6 +533,9 @@ def resample_ohlcv(config, df, interval):
             VOLUME: "sum",
         }
     )
+    resampled = resampled.loc[
+        resampled.index.normalize().isin(df.index.normalize().unique())
+    ]
 
     index = resampled.index
     trading_mask = np.zeros(len(index), dtype=bool)
