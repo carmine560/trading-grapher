@@ -602,8 +602,12 @@ def _prepare_parameters(config, formalized, trade_data, result, style):
     current = formalized[trade_data["entry_date"] <= formalized.index]
 
     if previous.notnull().values.any():
-        prices["closing"] = previous.dropna().tail(1)[CLOSE].iloc[0]
-        prices["opening"] = current.dropna().head(1)[OPEN].iloc[0]
+        previous = previous.dropna()
+        current = current.dropna()
+        if not previous.empty:
+            prices["closing"] = previous.tail(1)[CLOSE].iloc[0]
+        if not current.empty:
+            prices["opening"] = current.head(1)[OPEN].iloc[0]
 
     # nan is not recognized as False in a boolean context.
     if not pd.isna(trade_data["entry_time"]) and not pd.isna(
