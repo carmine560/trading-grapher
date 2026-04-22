@@ -600,7 +600,6 @@ def _prepare_parameters(config, formalized, trade_data, result, style):
 
     previous = formalized[formalized.index < trade_data["entry_date"]]
     current = formalized[trade_data["entry_date"] <= formalized.index]
-
     if previous.notnull().values.any():
         previous = previous.dropna()
         current = current.dropna()
