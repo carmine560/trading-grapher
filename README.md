@@ -34,6 +34,13 @@ python -m venv .venv
 python -m pip install -r requirements.txt -U
 ```
 
+## Run Tests (Optional)
+
+``` shell
+python -m pip install -r requirements-dev.txt -U
+pytest
+```
+
 ## Usage
 
 First, configure the path to your trading journal spreadsheet, the sheet name,
