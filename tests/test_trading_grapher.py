@@ -14,6 +14,7 @@ if "mplfinance" not in sys.modules:
 if "yfinance" not in sys.modules:
     sys.modules["yfinance"] = types.SimpleNamespace(Ticker=None)
 
+from core_utilities.errors import MarketDataError
 import trading_grapher as tg
 
 
@@ -173,6 +174,77 @@ def test_main_reports_chart_directory_discrepancies(monkeypatch, capsys):
     assert "/charts/missing.png file does not exist" in captured.out
 
 
+def test_main_exits_with_market_data_error_message(monkeypatch, capsys):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(
+        tg,
+        "save_market_data",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            MarketDataError("market data refresh failed")
+        ),
+    )
+    monkeypatch.setattr(tg, "plot_charts", lambda *args, **kwargs: None)
+    real_import_module = tg.importlib.import_module
+
+    def fake_import_module(name):
+        if name == "styles.fluorite":
+            return SimpleNamespace(style={"custom_style": {}, "rc": {}})
+        return real_import_module(name)
+
+    monkeypatch.setattr(tg.importlib, "import_module", fake_import_module)
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "market data refresh failed" in captured.out
+
+
 def test_resample_ohlcv_aggregates_and_drops_midday_break():
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     index = pd.date_range(
@@ -265,6 +337,59 @@ def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
     assert real_timestamp("2024-01-02 12:29:00+09:00") not in saved.index
     assert real_timestamp("2024-01-02 12:30:00+09:00") in saved.index
     assert saved[tg.VOLUME].max() == 10
+
+
+def test_save_market_data_raises_market_data_error_on_fetch_failure(
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(MarketDataError, match="Unable to fetch market data"):
+        tg.save_market_data(config, trade_data, "/tmp/not-used.csv")
+
+
+def test_plot_charts_raises_market_data_error_on_csv_failure():
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    trade_data = {
+        "optional_percentage_change": float("nan"),
+        "entry_price": 100.0,
+    }
+
+    with pytest.raises(MarketDataError, match="Unable to read market data"):
+        tg.plot_charts(
+            config,
+            trade_data,
+            "/tmp/does-not-exist.csv",
+            "/tmp",
+            "1m",
+            {},
+        )
 
 
 @pytest.mark.parametrize(

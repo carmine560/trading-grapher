@@ -14,6 +14,7 @@ import pandas as pd
 import yfinance
 
 from core_utilities import configuration, data_utilities, file_utilities
+from core_utilities.errors import MarketDataError
 import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
@@ -56,100 +57,110 @@ HALF_BAR_WIDTH = 0.5
 
 def main():
     """Parse trade data, save market data, plot charts, and check charts."""
-    args = get_arguments()
-    config_path = file_utilities.get_config_path(__file__)
-    config = configure(config_path)
-    trading_path = args.f[0] if args.f else config["General"]["trading_path"]
-    trading_sheet = config["General"]["trading_sheet"]
-
-    file_utilities.create_launchers_exit(args, __file__)
-    configure_exit(args, config_path, trading_path, trading_sheet)
-
-    trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
-    charts_directory = (
-        args.d[0] if args.d else config["General"]["charts_directory"]
-    )
-    interval = validate_interval(
-        args.i[0] if args.i else config["Chart"]["interval"]
-    )
-    has_plotted = False
-
-    for date in pd.to_datetime(args.dates):
-        trades = trading_journal.loc[
-            trading_journal[config["Trading Journal"]["entry_date"]] == date
-        ]
-        if not trades.empty:
-            first_index = next(trades.iterrows())[0]
-            for index, trade in trades.iterrows():
-                trade_data = {
-                    column: trade.get(config["Trading Journal"][column])
-                    for column in TRADING_JOURNAL_COLUMNS
-                }
-
-                if pd.isna(trade_data["optional_number"]):
-                    trade_data["optional_number"] = index - first_index + 1
-
-                trade_data["entry_date"] = trade_data[
-                    "entry_date"
-                ].tz_localize(config["Market Data"]["timezone"])
-
-                trade_data["order_specification"] = trade_data[
-                    "order_specification"
-                ].lower()
-                session = (
-                    "am"
-                    if pd.Timedelta(str(trade_data["exit_time"]))
-                    < pd.Timedelta(hours=12)
-                    else "pm"
-                )
-                market_data_path = os.path.join(
-                    charts_directory,
-                    f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
-                    f"-{session}-{trade_data['symbol']}.csv",
-                )
-
-                style_name = "fluorite"
-                for option in config.options("Styles"):
-                    key, value = configuration.evaluate_value(
-                        config["Styles"][option]
-                    )
-                    if value in trade_data.get(key, []):
-                        style_name = option
-                        break
-
-                try:
-                    style = importlib.import_module(
-                        f"styles.{style_name}"
-                    ).style
-                except ModuleNotFoundError as e:
-                    print(e)
-                    sys.exit(1)
-
-                save_market_data(config, trade_data, market_data_path)
-                plot_charts(
-                    config,
-                    trade_data,
-                    market_data_path,
-                    charts_directory,
-                    interval,
-                    style,
-                )
-                has_plotted = True
-
-    if (
-        has_plotted
-        and config["Trading Journal"]["optional_chart_file"]
-        in trading_journal.columns
-    ):
-        discrepancies = file_utilities.compare_directory_list(
-            charts_directory,
-            r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
-            trading_journal[config["Trading Journal"]["optional_chart_file"]],
+    try:
+        args = get_arguments()
+        config_path = file_utilities.get_config_path(__file__)
+        config = configure(config_path)
+        trading_path = (
+            args.f[0] if args.f else config["General"]["trading_path"]
         )
-        for path in discrepancies["unexpected_files"]:
-            print(f"The {path} file is not in the list.")
-        for path in discrepancies["missing_files"]:
-            print(f"The {path} file does not exist in the directory.")
+        trading_sheet = config["General"]["trading_sheet"]
+
+        file_utilities.create_launchers_exit(args, __file__)
+        configure_exit(args, config_path, trading_path, trading_sheet)
+
+        trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
+        charts_directory = (
+            args.d[0] if args.d else config["General"]["charts_directory"]
+        )
+        interval = validate_interval(
+            args.i[0] if args.i else config["Chart"]["interval"]
+        )
+        has_plotted = False
+
+        for date in pd.to_datetime(args.dates):
+            trades = trading_journal.loc[
+                trading_journal[config["Trading Journal"]["entry_date"]]
+                == date
+            ]
+            if not trades.empty:
+                first_index = next(trades.iterrows())[0]
+                for index, trade in trades.iterrows():
+                    trade_data = {
+                        column: trade.get(config["Trading Journal"][column])
+                        for column in TRADING_JOURNAL_COLUMNS
+                    }
+
+                    if pd.isna(trade_data["optional_number"]):
+                        trade_data["optional_number"] = index - first_index + 1
+
+                    trade_data["entry_date"] = trade_data[
+                        "entry_date"
+                    ].tz_localize(config["Market Data"]["timezone"])
+
+                    trade_data["order_specification"] = trade_data[
+                        "order_specification"
+                    ].lower()
+                    session = (
+                        "am"
+                        if pd.Timedelta(str(trade_data["exit_time"]))
+                        < pd.Timedelta(hours=12)
+                        else "pm"
+                    )
+                    market_data_path = os.path.join(
+                        charts_directory,
+                        f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
+                        f"-{session}-{trade_data['symbol']}.csv",
+                    )
+
+                    style_name = "fluorite"
+                    for option in config.options("Styles"):
+                        key, value = configuration.evaluate_value(
+                            config["Styles"][option]
+                        )
+                        if value in trade_data.get(key, []):
+                            style_name = option
+                            break
+
+                    try:
+                        style = importlib.import_module(
+                            f"styles.{style_name}"
+                        ).style
+                    except ModuleNotFoundError as e:
+                        raise MarketDataError(
+                            f"Unable to load style '{style_name}': {e}"
+                        ) from e
+
+                    save_market_data(config, trade_data, market_data_path)
+                    plot_charts(
+                        config,
+                        trade_data,
+                        market_data_path,
+                        charts_directory,
+                        interval,
+                        style,
+                    )
+                    has_plotted = True
+
+        if (
+            has_plotted
+            and config["Trading Journal"]["optional_chart_file"]
+            in trading_journal.columns
+        ):
+            discrepancies = file_utilities.compare_directory_list(
+                charts_directory,
+                r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
+                trading_journal[
+                    config["Trading Journal"]["optional_chart_file"]
+                ],
+            )
+            for path in discrepancies["unexpected_files"]:
+                print(f"The {path} file is not in the list.")
+            for path in discrepancies["missing_files"]:
+                print(f"The {path} file does not exist in the directory.")
+    except MarketDataError as e:
+        print(e)
+        sys.exit(1)
 
 
 # CLI and Configuration
@@ -437,8 +448,9 @@ def save_market_data(config, trade_data, market_data_path):
                 f"{config['Market Data']['exchange_suffix']}"
             ).history(interval=interval, period=f"{PERIOD_IN_DAYS}d")
         except Exception as e:
-            print(e)
-            sys.exit(1)
+            raise MarketDataError(
+                f"Unable to fetch market data for {trade_data['symbol']}: {e}"
+            ) from e
 
         volume_threshold = symbol_data[VOLUME].quantile(
             float(config["Volume"]["quantile_threshold"])
@@ -513,14 +525,16 @@ def save_market_data(config, trade_data, market_data_path):
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
 
         if formalized.isna().values.all():
-            print("Values are missing.")
-            sys.exit(1)
+            raise MarketDataError(
+                f"Values are missing for {trade_data['symbol']}."
+            )
 
         try:
             formalized.to_csv(market_data_path)
         except Exception as e:
-            print(e)
-            sys.exit(1)
+            raise MarketDataError(
+                f"Unable to write market data to {market_data_path}: {e}"
+            ) from e
 
 
 def resample_ohlcv(config, df, interval):
@@ -732,8 +746,9 @@ def plot_charts(
             market_data_path, index_col=0, parse_dates=True
         )
     except Exception as e:
-        print(e)
-        sys.exit(1)
+        raise MarketDataError(
+            f"Unable to read market data from {market_data_path}: {e}"
+        ) from e
 
     formalized = resample_ohlcv(config, formalized, interval)
 
