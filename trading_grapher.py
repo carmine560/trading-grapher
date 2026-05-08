@@ -86,7 +86,7 @@ def main():
                     for column in TRADING_JOURNAL_COLUMNS
                 }
 
-                if not trade_data["optional_number"]:
+                if pd.isna(trade_data["optional_number"]):
                     trade_data["optional_number"] = index - first_index + 1
 
                 trade_data["entry_date"] = trade_data[
