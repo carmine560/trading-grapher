@@ -141,11 +141,15 @@ def main():
         and config["Trading Journal"]["optional_chart_file"]
         in trading_journal.columns
     ):
-        file_utilities.compare_directory_list(
+        discrepancies = file_utilities.compare_directory_list(
             charts_directory,
             r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
             trading_journal[config["Trading Journal"]["optional_chart_file"]],
         )
+        for path in discrepancies["unexpected_files"]:
+            print(f"The {path} file is not in the list.")
+        for path in discrepancies["missing_files"]:
+            print(f"The {path} file does not exist in the directory.")
 
 
 # CLI and Configuration
