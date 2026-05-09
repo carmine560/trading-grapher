@@ -13,7 +13,11 @@ import numpy as np
 import pandas as pd
 import yfinance
 
-from core_utilities import configuration, data_utilities, file_utilities
+from core_utilities import data_utilities, file_utilities
+from core_utilities.config_diff import check_config_changes
+from core_utilities.config_io import read_config
+from core_utilities.config_prompt import modify_section
+from core_utilities.config_validation import evaluate_value
 from core_utilities.errors import MarketDataError
 import indicators
 
@@ -115,9 +119,7 @@ def main():
 
                     style_name = "fluorite"
                     for option in config.options("Styles"):
-                        key, value = configuration.evaluate_value(
-                            config["Styles"][option]
-                        )
+                        key, value = evaluate_value(config["Styles"][option])
                         if value in trade_data.get(key, []):
                             style_name = option
                             break
@@ -317,7 +319,7 @@ def configure(config_path, can_interpolate=True, can_override=True):
     }
 
     if can_override:
-        configuration.read_config(config, config_path)
+        read_config(config, config_path)
 
     return config
 
@@ -344,7 +346,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
             ),
         }.items():
             if getattr(args, argument):
-                configuration.modify_section(
+                modify_section(
                     config,
                     section,
                     config_path,
@@ -365,7 +367,7 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
 
         sys.exit()
     if args.C:
-        configuration.check_config_changes(
+        check_config_changes(
             configure(config_path, can_interpolate=False, can_override=False),
             config_path,
             excluded_sections=("Trading Journal",),
