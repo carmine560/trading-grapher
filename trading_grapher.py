@@ -94,6 +94,7 @@ def main():
                         column: trade.get(config["Trading Journal"][column])
                         for column in TRADING_JOURNAL_COLUMNS
                     }
+                    _validate_trade_data(trade_data, index)
 
                     if pd.isna(trade_data["optional_number"]):
                         trade_data["optional_number"] = index - first_index + 1
@@ -377,6 +378,40 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
 
 
 # Time and Interval Utilities
+
+
+def _validate_trade_data(trade_data, row_index):
+    """Validate required trade-row fields before transformation."""
+    if pd.isna(trade_data["entry_date"]):
+        raise MarketDataError(f"Trade row {row_index} is missing entry_date.")
+    try:
+        trade_data["entry_date"] = pd.Timestamp(trade_data["entry_date"])
+    except (TypeError, ValueError) as e:
+        raise MarketDataError(
+            f"Trade row {row_index} has invalid entry_date: "
+            f"{trade_data['entry_date']}"
+        ) from e
+
+    if not trade_data["symbol"] or pd.isna(trade_data["symbol"]):
+        raise MarketDataError(f"Trade row {row_index} is missing symbol.")
+
+    if not isinstance(trade_data["order_specification"], str):
+        raise MarketDataError(
+            f"Trade row {row_index} has invalid order_specification."
+        )
+
+    if not trade_data["order_specification"].strip():
+        raise MarketDataError(
+            f"Trade row {row_index} has empty order_specification."
+        )
+
+    try:
+        pd.Timedelta(str(trade_data["exit_time"]))
+    except (TypeError, ValueError) as e:
+        raise MarketDataError(
+            f"Trade row {row_index} has invalid exit_time: "
+            f"{trade_data['exit_time']}"
+        ) from e
 
 
 def validate_interval(interval):

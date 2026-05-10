@@ -245,6 +245,110 @@ def test_main_exits_with_market_data_error_message(monkeypatch, capsys):
     assert "market data refresh failed" in captured.out
 
 
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (pd.NaT, "Trade row 0 is missing entry_date."),
+        ("abc", "Trade row 0 has invalid entry_date: abc"),
+    ],
+)
+def test_validate_trade_data_rejects_bad_entry_date(value, message):
+    trade_data = {
+        "entry_date": value,
+        "symbol": "1234",
+        "order_specification": "long",
+        "exit_time": pd.Timestamp("2024-01-02 13:00:00").time(),
+    }
+
+    with pytest.raises(MarketDataError, match=message):
+        tg._validate_trade_data(trade_data, 0)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("Symbol", "", "Trade row 0 is missing symbol."),
+        (
+            "Order specification",
+            float("nan"),
+            "Trade row 0 has invalid order_specification.",
+        ),
+        (
+            "Order specification",
+            "   ",
+            "Trade row 0 has empty order_specification.",
+        ),
+        (
+            "Exit time",
+            "abc",
+            "Trade row 0 has invalid exit_time: abc",
+        ),
+    ],
+)
+def test_main_validates_trade_rows_before_processing(
+    monkeypatch,
+    capsys,
+    field,
+    value,
+    message,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+    journal.loc[0, field] = value
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(tg, "save_market_data", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tg, "plot_charts", lambda *args, **kwargs: None)
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert message in captured.out
+
+
 def test_resample_ohlcv_aggregates_and_drops_midday_break():
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     index = pd.date_range(
