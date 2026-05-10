@@ -445,6 +445,23 @@ def create_timestamp(date, time):
 # Market Data Acquisition and Preparation
 
 
+def _validate_symbol_data(symbol_data, trade_data):
+    """Validate the raw market-data frame returned by the provider."""
+    if symbol_data.empty:
+        raise MarketDataError(
+            f"No market data returned for {trade_data['symbol']}."
+        )
+
+    required_columns = {OPEN, HIGH, LOW, CLOSE, VOLUME}
+    missing_columns = required_columns.difference(symbol_data.columns)
+    if missing_columns:
+        missing_text = ", ".join(sorted(missing_columns))
+        raise MarketDataError(
+            f"Market data for {trade_data['symbol']} is missing columns: "
+            f"{missing_text}"
+        )
+
+
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
     PERIOD_IN_DAYS = 5
@@ -489,6 +506,8 @@ def save_market_data(config, trade_data, market_data_path):
                 f"Unable to fetch market data for {trade_data['symbol']}: {e}"
             ) from e
 
+        _validate_symbol_data(symbol_data, trade_data)
+
         volume_threshold = symbol_data[VOLUME].quantile(
             float(config["Volume"]["quantile_threshold"])
         )
@@ -497,7 +516,7 @@ def save_market_data(config, trade_data, market_data_path):
             volume_threshold,
             symbol_data[VOLUME],
         )
-        symbol_data[VOLUME] = symbol_data[VOLUME].astype(int)
+        symbol_data[VOLUME] = symbol_data[VOLUME].astype("Int64")
 
         previous = symbol_data[symbol_data.index < trade_data["entry_date"]]
         if not previous.empty:
@@ -560,11 +579,6 @@ def save_market_data(config, trade_data, market_data_path):
             end -= bar_timedelta
             exclusion = pd.date_range(start=start, end=end, freq=freq)
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
-
-        if formalized.isna().values.all():
-            raise MarketDataError(
-                f"Values are missing for {trade_data['symbol']}."
-            )
 
         try:
             formalized.to_csv(market_data_path)

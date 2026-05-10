@@ -478,6 +478,143 @@ def test_save_market_data_raises_market_data_error_on_fetch_failure(
         tg.save_market_data(config, trade_data, "/tmp/not-used.csv")
 
 
+def test_save_market_data_rejects_empty_symbol_data(tmp_path, monkeypatch):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "empty.csv"
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(MarketDataError, match="No market data returned"):
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+
+def test_save_market_data_rejects_missing_ohlcv_columns(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "missing-volume.csv"
+    real_timestamp = pd.Timestamp
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return pd.DataFrame(
+                {
+                    tg.OPEN: [100.0, 101.0],
+                    tg.HIGH: [101.0, 102.0],
+                    tg.LOW: [99.0, 100.0],
+                    tg.CLOSE: [100.5, 101.5],
+                },
+                index=index,
+            )
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(MarketDataError, match="missing columns: Volume"):
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+
+def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "sparse.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [float("nan"), float("nan")],
+            tg.HIGH: [float("nan"), float("nan")],
+            tg.LOW: [float("nan"), float("nan")],
+            tg.CLOSE: [float("nan"), float("nan")],
+            tg.VOLUME: [float("nan"), float("nan")],
+        },
+        index=index,
+    )
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+    assert saved.isna().any().any()
+
+
 def test_plot_charts_raises_market_data_error_on_csv_failure():
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     trade_data = {
