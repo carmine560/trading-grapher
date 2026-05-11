@@ -615,6 +615,119 @@ def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
     assert saved.isna().any().any()
 
 
+def test_save_market_data_normalizes_object_volume_values(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Volume"]["quantile_threshold"] = "1.0"
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "object-volume.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: ["10", ""],
+        },
+        index=index,
+    )
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+    assert saved.iloc[0][tg.VOLUME] == 10
+    assert pd.isna(saved.iloc[1][tg.VOLUME])
+
+
+def test_save_market_data_handles_non_integer_volume_threshold(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Volume"]["quantile_threshold"] = "0.75"
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "quantile-volume.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: [1, 2],
+        },
+        index=index,
+    )
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+    assert saved[tg.VOLUME].dropna().max() == 1
+
+
 def test_plot_charts_raises_market_data_error_on_csv_failure():
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     trade_data = {

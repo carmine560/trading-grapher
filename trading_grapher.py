@@ -507,15 +507,17 @@ def save_market_data(config, trade_data, market_data_path):
             ) from e
 
         _validate_symbol_data(symbol_data, trade_data)
+        symbol_data[VOLUME] = pd.to_numeric(
+            symbol_data[VOLUME], errors="coerce"
+        )
 
         volume_threshold = symbol_data[VOLUME].quantile(
             float(config["Volume"]["quantile_threshold"])
         )
-        symbol_data[VOLUME] = np.where(
-            symbol_data[VOLUME] > volume_threshold,
-            volume_threshold,
-            symbol_data[VOLUME],
-        )
+        if pd.notna(volume_threshold):
+            symbol_data[VOLUME] = symbol_data[VOLUME].clip(
+                upper=int(volume_threshold)
+            )
         symbol_data[VOLUME] = symbol_data[VOLUME].astype("Int64")
 
         previous = symbol_data[symbol_data.index < trade_data["entry_date"]]
@@ -555,7 +557,9 @@ def save_market_data(config, trade_data, market_data_path):
             columns=(OPEN, HIGH, LOW, CLOSE, VOLUME),
         )
         formalized.index.name = DATETIME
-        formalized[VOLUME] = formalized[VOLUME].astype("Int64")
+        formalized[VOLUME] = pd.to_numeric(
+            formalized[VOLUME], errors="coerce"
+        ).astype("Int64")
 
         if morning and not previous.empty:
             start = create_timestamp(
