@@ -53,6 +53,7 @@ INTERVALS = {
     "3m": {"freq": "3min", "minutes": 3},
     "5m": {"freq": "5min", "minutes": 5},
 }
+MARKET_DATA_PERIOD_IN_DAYS = 7
 HALF_BAR_WIDTH = 0.5
 
 
@@ -462,33 +463,49 @@ def _validate_symbol_data(symbol_data, trade_data):
         )
 
 
+def should_refresh_market_data(
+    entry_date,
+    last_bar_time,
+    modified_time,
+    now,
+    delay_minutes,
+    period_in_days,
+):
+    """Return whether market data should be fetched from the provider."""
+    delta = now.normalize() - entry_date
+    if period_in_days <= delta.days:
+        return False
+    if last_bar_time + pd.Timedelta(minutes=delay_minutes) < modified_time:
+        return False
+    if now < modified_time + pd.Timedelta(minutes=1):
+        return False
+    return True
+
+
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
-    PERIOD_IN_DAYS = 5
-    delta = (
-        pd.Timestamp.now(tz=config["Market Data"]["timezone"]).normalize()
-        - trade_data["entry_date"]
-    )
-    last = modified_time = pd.Timestamp(
+    now = pd.Timestamp.now(tz=config["Market Data"]["timezone"])
+    last_bar_time = modified_time = pd.Timestamp(
         0, tz=config["Market Data"]["timezone"]
     )
     if os.path.isfile(market_data_path):
         formalized = pd.read_csv(
             market_data_path, index_col=0, parse_dates=True
         )
-        last = formalized.tail(1).index[0]
+        last_bar_time = formalized.tail(1).index[0]
         modified_time = pd.Timestamp(
             os.path.getmtime(market_data_path),
             tz=config["Market Data"]["timezone"],
             unit="s",
         )
 
-    if (
-        PERIOD_IN_DAYS <= 1 + delta.days
-        or last + pd.Timedelta(minutes=int(config["Market Data"]["delay"]))
-        < modified_time
-        or pd.Timestamp.now(tz=config["Market Data"]["timezone"])
-        < modified_time + pd.Timedelta(minutes=1)
+    if not should_refresh_market_data(
+        trade_data["entry_date"],
+        last_bar_time,
+        modified_time,
+        now,
+        int(config["Market Data"]["delay"]),
+        MARKET_DATA_PERIOD_IN_DAYS,
     ):
         return
     else:
@@ -500,7 +517,10 @@ def save_market_data(config, trade_data, market_data_path):
             symbol_data = yfinance.Ticker(
                 f"{trade_data['symbol']}"
                 f"{config['Market Data']['exchange_suffix']}"
-            ).history(interval=interval, period=f"{PERIOD_IN_DAYS}d")
+            ).history(
+                interval=interval,
+                period=f"{MARKET_DATA_PERIOD_IN_DAYS}d",
+            )
         except Exception as e:
             raise MarketDataError(
                 f"Unable to fetch market data for {trade_data['symbol']}: {e}"

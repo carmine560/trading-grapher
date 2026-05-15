@@ -381,6 +381,58 @@ def test_resample_ohlcv_aggregates_and_drops_midday_break():
     assert pd.Timestamp("2024-01-02 12:30:00") in result.index
 
 
+@pytest.mark.parametrize(
+    ("entry_date", "last_bar_time", "modified_time", "now", "expected"),
+    [
+        (
+            "2024-01-10 00:00:00+09:00",
+            "1970-01-01 00:00:00+09:00",
+            "1970-01-01 00:00:00+09:00",
+            "2024-01-12 09:00:00+09:00",
+            True,
+        ),
+        (
+            "2024-01-05 00:00:00+09:00",
+            "1970-01-01 00:00:00+09:00",
+            "1970-01-01 00:00:00+09:00",
+            "2024-01-12 09:00:00+09:00",
+            False,
+        ),
+        (
+            "2024-01-10 00:00:00+09:00",
+            "2024-01-12 09:00:00+09:00",
+            "2024-01-12 09:21:00+09:00",
+            "2024-01-12 10:00:00+09:00",
+            False,
+        ),
+        (
+            "2024-01-10 00:00:00+09:00",
+            "2024-01-12 09:00:00+09:00",
+            "2024-01-12 09:00:00+09:00",
+            "2024-01-12 09:00:30+09:00",
+            False,
+        ),
+    ],
+)
+def test_should_refresh_market_data_handles_refresh_gate(
+    entry_date,
+    last_bar_time,
+    modified_time,
+    now,
+    expected,
+):
+    result = tg.should_refresh_market_data(
+        pd.Timestamp(entry_date),
+        pd.Timestamp(last_bar_time),
+        pd.Timestamp(modified_time),
+        pd.Timestamp(now),
+        delay_minutes=20,
+        period_in_days=tg.MARKET_DATA_PERIOD_IN_DAYS,
+    )
+
+    assert result is expected
+
+
 def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     config["Volume"]["quantile_threshold"] = "0.5"
@@ -409,7 +461,7 @@ def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
 
         def history(self, interval, period):
             assert interval == "1m"
-            assert period == "5d"
+            assert period == f"{tg.MARKET_DATA_PERIOD_IN_DAYS}d"
             return symbol_data
 
     real_timestamp = pd.Timestamp
