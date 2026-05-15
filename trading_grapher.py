@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 import yfinance
 
+import indicators
 from core_utilities import data_utilities, file_utilities
 from core_utilities.config_diff import check_config_changes
 from core_utilities.config_io import read_config
 from core_utilities.config_prompt import modify_section
 from core_utilities.config_validation import evaluate_value
 from core_utilities.errors import MarketDataError
-import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
@@ -808,14 +808,19 @@ def plot_charts(
     formalized = resample_ohlcv(config, formalized, interval)
 
     result = _calculate_trade_result(trade_data)
+    if pd.isna(trade_data["optional_percentage_change"]):
+        if (
+            pd.isna(trade_data["entry_price"])
+            or trade_data["entry_price"] == 0
+        ):
+            percentage_change = 0.0
+        else:
+            percentage_change = 100 * result / trade_data["entry_price"]
+    else:
+        percentage_change = trade_data["optional_percentage_change"]
 
     timestamps, prices, colors = _prepare_parameters(
         config, formalized, trade_data, result, style
-    )
-    percentage_change = (
-        100 * result / trade_data["entry_price"]
-        if pd.isna(trade_data["optional_percentage_change"])
-        else trade_data["optional_percentage_change"]
     )
 
     addplot = []

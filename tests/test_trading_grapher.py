@@ -746,6 +746,125 @@ def test_plot_charts_raises_market_data_error_on_csv_failure():
         )
 
 
+@pytest.mark.parametrize("entry_price", [0.0, float("nan")])
+def test_plot_charts_uses_zero_percentage_when_entry_price_is_invalid(
+    tmp_path,
+    monkeypatch,
+    entry_price,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    for section in (
+        "Active Trading Hours",
+        "EMA",
+        "VWAP",
+        "MACD",
+        "Stochastics",
+        "Volume",
+        "Minor X-ticks",
+        "Text",
+    ):
+        config[section]["is_added"] = "False"
+    market_data_path = tmp_path / "market.csv"
+    index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
+    pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    ).to_csv(market_data_path)
+    captured = {}
+
+    class FakeFigure:
+        def savefig(self, path):
+            captured["path"] = path
+
+    class FakeAxes:
+        def get_xlim(self):
+            return (0, 2)
+
+        def set_xticks(self, ticks, minor=False):
+            captured["ticks"] = ticks
+
+        def set_yticks(self, ticks):
+            captured["yticks"] = ticks
+
+        def get_ylim(self):
+            return (0, 1)
+
+        def set_ylim(self, *limits):
+            captured["ylim"] = limits
+
+        def fill_betweenx(self, *args, **kwargs):
+            captured["fill_betweenx"] = (args, kwargs)
+
+        def axvline(self, *args, **kwargs):
+            captured["axvline"] = (args, kwargs)
+
+        def text(self, *args, **kwargs):
+            captured.setdefault("texts", []).append((args, kwargs))
+
+    def fake_plot(*args, **kwargs):
+        return FakeFigure(), [FakeAxes(), FakeAxes()]
+
+    monkeypatch.setattr(tg.mpf, "plot", fake_plot)
+
+    def fake_add_all_tooltips(
+        config,
+        axlist,
+        formalized,
+        trade_data,
+        prices,
+        timestamps,
+        result,
+        percentage_change,
+        style,
+        colors,
+    ):
+        captured["percentage_change"] = percentage_change
+
+    monkeypatch.setattr(tg, "_add_all_tooltips", fake_add_all_tooltips)
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02"),
+        "entry_time": pd.Timestamp("2024-01-02 09:00:00").time(),
+        "entry_price": entry_price,
+        "exit_time": pd.Timestamp("2024-01-02 09:01:00").time(),
+        "exit_price": 101.0,
+        "optional_percentage_change": float("nan"),
+        "optional_tactic": float("nan"),
+        "optional_number": 1,
+        "symbol": "1234",
+        "order_specification": "long",
+    }
+    style = {
+        "rc": {"axes.edgecolor": "gray"},
+        "custom_style": {
+            "neutral_color": "gray",
+            "profit_color": "green",
+            "loss_color": "red",
+            "filled_area_alpha": 0.1,
+            "line_alpha": 0.4,
+            "closing_line": "--",
+            "opening_line": "--",
+            "entry_line": ":",
+            "exit_line": ":",
+            "tooltip_color": "black",
+            "tooltip_bbox_alpha": 0.5,
+            "minor_grid_alpha": 0.2,
+            "text_bbox_alpha": 0.5,
+        },
+    }
+
+    tg.plot_charts(
+        config, trade_data, str(market_data_path), str(tmp_path), "1m", style
+    )
+
+    assert captured["percentage_change"] == 0.0
+
+
 @pytest.mark.parametrize(
     ("trade_data", "expected"),
     [
