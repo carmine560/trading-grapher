@@ -174,6 +174,58 @@ def test_main_reports_chart_directory_discrepancies(monkeypatch, capsys):
     assert "/charts/missing.png file does not exist" in captured.out
 
 
+def test_main_reports_trading_journal_read_failure(monkeypatch, capsys):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["trading_path"] = "/tmp/missing.ods"
+    config["General"]["trading_sheet"] = "Bad Sheet"
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(
+        tg.pd,
+        "read_excel",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("missing")),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "Unable to read trading journal '/tmp/missing.ods'" in captured.out
+    assert "sheet 'Bad Sheet'" in captured.out
+    assert "missing" in captured.out
+
+
 def test_main_exits_with_market_data_error_message(monkeypatch, capsys):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     journal = pd.DataFrame(

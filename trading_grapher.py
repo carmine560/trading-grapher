@@ -74,7 +74,7 @@ def main():
         file_utilities.create_launchers_exit(args, __file__)
         configure_exit(args, config_path, trading_path, trading_sheet)
 
-        trading_journal = pd.read_excel(trading_path, sheet_name=trading_sheet)
+        trading_journal = read_trading_journal(trading_path, trading_sheet)
         charts_directory = (
             args.d[0] if args.d else config["General"]["charts_directory"]
         )
@@ -379,6 +379,17 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
 
 
 # Time and Interval Utilities
+
+
+def read_trading_journal(trading_path, trading_sheet):
+    """Read the trading journal spreadsheet with input-specific context."""
+    try:
+        return pd.read_excel(trading_path, sheet_name=trading_sheet)
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to read trading journal '{trading_path}' "
+            f"sheet '{trading_sheet}': {e}"
+        ) from e
 
 
 def _validate_trade_data(trade_data, row_index):
