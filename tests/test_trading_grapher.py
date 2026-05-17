@@ -969,6 +969,113 @@ def test_plot_charts_uses_zero_percentage_when_entry_price_is_invalid(
     assert captured["percentage_change"] == 0.0
 
 
+def test_get_x_returns_none_for_unmatched_timestamp():
+    index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
+
+    assert tg.get_x(index, pd.Timestamp("2024-01-02 08:59:00")) is None
+
+
+@pytest.mark.parametrize("index", [None, pd.DatetimeIndex([])])
+def test_get_x_returns_none_for_missing_or_empty_index(index):
+    assert tg.get_x(index, pd.Timestamp("2024-01-02 08:59:00")) is None
+
+
+def test_add_vertical_elements_skips_unmatched_marker_positions():
+    index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
+    formalized = pd.DataFrame(index=index)
+    captured = {"axvline": [], "fill_betweenx": []}
+
+    class FakeAxes:
+        def get_ylim(self):
+            return (0, 1)
+
+        def set_ylim(self, *limits):
+            captured["ylim"] = limits
+
+        def fill_betweenx(self, *args, **kwargs):
+            captured["fill_betweenx"].append((args, kwargs))
+
+        def axvline(self, *args, **kwargs):
+            captured["axvline"].append((args, kwargs))
+
+    tg.add_vertical_elements(
+        formalized,
+        {
+            "start": pd.Timestamp("2024-01-02 08:00:00"),
+            "end": pd.Timestamp("2024-01-02 09:30:00"),
+            "entry": pd.Timestamp("2024-01-02 08:59:00"),
+            "exit": pd.Timestamp("2024-01-02 09:01:00"),
+        },
+        [FakeAxes(), FakeAxes()],
+        {"entry": "gray", "exit": "green"},
+        {
+            "custom_style": {
+                "line_alpha": 0.4,
+                "entry_line": ":",
+                "exit_line": ":",
+                "active_trading_hours_color": "blue",
+            }
+        },
+        True,
+    )
+
+    assert captured["fill_betweenx"] == []
+    assert len(captured["axvline"]) == 1
+    assert captured["axvline"][0][1]["x"] == 1
+
+
+def test_add_tooltips_skips_unmatched_timestamp_label():
+    index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
+    formalized = pd.DataFrame(index=index)
+    captured = []
+
+    class FakeAxes:
+        def text(self, *args, **kwargs):
+            captured.append((args, kwargs))
+
+        def get_ylim(self):
+            return (0, 1)
+
+    tg.add_tooltips(
+        [FakeAxes(), FakeAxes()],
+        100.0,
+        "label",
+        "black",
+        "gray",
+        0.5,
+        formalized=formalized,
+        timestamp=pd.Timestamp("2024-01-02 08:59:00"),
+    )
+
+    assert len(captured) == 1
+    assert captured[0][0][1] == 100.0
+
+
+def test_add_tooltips_skips_timestamp_label_without_formalized():
+    captured = []
+
+    class FakeAxes:
+        def text(self, *args, **kwargs):
+            captured.append((args, kwargs))
+
+        def get_ylim(self):
+            return (0, 1)
+
+    tg.add_tooltips(
+        [FakeAxes(), FakeAxes()],
+        100.0,
+        "label",
+        "black",
+        "gray",
+        0.5,
+        formalized=None,
+        timestamp=pd.Timestamp("2024-01-02 08:59:00"),
+    )
+
+    assert len(captured) == 1
+    assert captured[0][0][1] == 100.0
+
+
 @pytest.mark.parametrize(
     ("trade_data", "expected"),
     [

@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 import yfinance
 
-import indicators
 from core_utilities import data_utilities, file_utilities
 from core_utilities.config_diff import check_config_changes
 from core_utilities.config_io import read_config
 from core_utilities.config_prompt import modify_section
 from core_utilities.config_validation import evaluate_value
 from core_utilities.errors import MarketDataError
+import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
@@ -1133,6 +1133,16 @@ def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
 
 
+def get_x(index, timestamp, method="ffill"):
+    """Map a real timestamp to a bar index for plotting."""
+    if index is None or len(index) == 0:
+        return None
+    if timestamp is None or pd.isna(timestamp):
+        return None
+    position = index.get_indexer([timestamp], method=method)[0]
+    return None if position == -1 else position
+
+
 def add_vertical_elements(
     formalized,
     timestamps,
@@ -1142,42 +1152,49 @@ def add_vertical_elements(
     is_active_trading_hours_added,
 ):
     """Add vertical elements between panels at the specified timestamps."""
+    start_x = end_x = entry_x = exit_x = None
+    if timestamps["start"] and timestamps["end"]:
+        start_x = get_x(formalized.index, timestamps["start"])
+        end_x = get_x(formalized.index, timestamps["end"])
+    if timestamps["entry"]:
+        entry_x = get_x(formalized.index, timestamps["entry"])
+    if timestamps["exit"]:
+        exit_x = get_x(formalized.index, timestamps["exit"])
+
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
             if (
                 is_active_trading_hours_added
-                and timestamps["start"]
-                and timestamps["end"]
+                and start_x is not None
+                and end_x is not None
             ):
                 # Force a redraw of the y-limits to ensure all plot
                 # elements are taken into account.
                 axlist[index].set_ylim(*axlist[index].get_ylim())
                 axlist[index].fill_betweenx(
                     axlist[index].get_ylim(),
-                    get_x(formalized.index, timestamps["start"])
-                    - HALF_BAR_WIDTH,
-                    get_x(formalized.index, timestamps["end"])
-                    + HALF_BAR_WIDTH,
+                    start_x - HALF_BAR_WIDTH,
+                    end_x + HALF_BAR_WIDTH,
                     facecolor=style["custom_style"][
                         "active_trading_hours_color"
                     ],
                     zorder=0,
                 )
-            if timestamps["entry"]:
+            if entry_x is not None:
                 axlist[index].axvline(
                     alpha=style["custom_style"]["line_alpha"],
                     color=colors["entry"],
                     linestyle=style["custom_style"]["entry_line"],
                     linewidth=1,
-                    x=get_x(formalized.index, timestamps["entry"]),
+                    x=entry_x,
                 )
-            if timestamps["exit"]:
+            if exit_x is not None:
                 axlist[index].axvline(
                     alpha=style["custom_style"]["line_alpha"],
                     color=colors["exit"],
                     linestyle=style["custom_style"]["exit_line"],
                     linewidth=1,
-                    x=get_x(formalized.index, timestamps["exit"]),
+                    x=exit_x,
                 )
 
 
@@ -1208,12 +1225,13 @@ def add_tooltips(
         ),
     )
 
-    if timestamp:
+    x = get_x(formalized.index if formalized is not None else None, timestamp)
+    if x is not None:
         last_primary_axes = len(axlist) - 2
         bottom, _ = axlist[last_primary_axes].get_ylim()
 
         axlist[last_primary_axes].text(
-            get_x(formalized.index, timestamp),
+            x,
             bottom,
             timestamp.strftime(TIME_FORMAT),
             c=color,
@@ -1227,13 +1245,6 @@ def add_tooltips(
                 fc=bbox_color,
             ),
         )
-
-
-def get_x(index, timestamp, method="ffill"):
-    """Map a real timestamp to a bar index for plotting."""
-    if timestamp is None or pd.isna(timestamp):
-        return None
-    return index.get_indexer([timestamp], method=method)[0]
 
 
 def add_text(
