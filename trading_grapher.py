@@ -13,13 +13,13 @@ import numpy as np
 import pandas as pd
 import yfinance
 
+import indicators
 from core_utilities import data_utilities, file_utilities
 from core_utilities.config_diff import check_config_changes
 from core_utilities.config_io import read_config
 from core_utilities.config_prompt import modify_section
 from core_utilities.config_validation import evaluate_value
 from core_utilities.errors import MarketDataError
-import indicators
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
@@ -326,6 +326,17 @@ def configure(config_path, can_interpolate=True, can_override=True):
     return config
 
 
+def read_trading_journal(trading_path, trading_sheet):
+    """Read the trading journal spreadsheet with input-specific context."""
+    try:
+        return pd.read_excel(trading_path, sheet_name=trading_sheet)
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to read trading journal '{trading_path}' "
+            f"sheet '{trading_sheet}': {e}"
+        ) from e
+
+
 def configure_exit(args, config_path, trading_path, trading_sheet):
     """Configure parameters based on command-line arguments and exit."""
     backup_parameters = {"number_of_backups": 8}
@@ -357,8 +368,8 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
                     prompts=prompts,
                     all_values=(
                         tuple(
-                            pd.read_excel(
-                                trading_path, sheet_name=trading_sheet
+                            read_trading_journal(
+                                trading_path, trading_sheet
                             ).columns
                         )
                         if argument == "J"
@@ -379,17 +390,6 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
 
 
 # Time and Interval Utilities
-
-
-def read_trading_journal(trading_path, trading_sheet):
-    """Read the trading journal spreadsheet with input-specific context."""
-    try:
-        return pd.read_excel(trading_path, sheet_name=trading_sheet)
-    except Exception as e:
-        raise MarketDataError(
-            f"Unable to read trading journal '{trading_path}' "
-            f"sheet '{trading_sheet}': {e}"
-        ) from e
 
 
 def _validate_trade_data(trade_data, row_index):
