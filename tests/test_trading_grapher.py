@@ -719,6 +719,63 @@ def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
     assert saved.isna().any().any()
 
 
+def test_save_market_data_handles_empty_prior_session(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "empty-prior-session.csv"
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2024-01-01 12:30:00", tz=timezone),
+            pd.Timestamp("2024-01-01 12:31:00", tz=timezone),
+            pd.Timestamp("2024-01-02 09:00:00", tz=timezone),
+            pd.Timestamp("2024-01-02 09:01:00", tz=timezone),
+        ]
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [float("nan"), float("nan"), 100.0, 101.0],
+            tg.HIGH: [float("nan"), float("nan"), 101.0, 102.0],
+            tg.LOW: [float("nan"), float("nan"), 99.0, 100.0],
+            tg.CLOSE: [float("nan"), float("nan"), 100.5, 101.5],
+            tg.VOLUME: [float("nan"), float("nan"), 10, 20],
+        },
+        index=index,
+    )
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "10:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+    assert saved.index[0] == real_timestamp("2024-01-02 09:00:00+09:00")
+
+
 def test_save_market_data_normalizes_object_volume_values(
     tmp_path,
     monkeypatch,

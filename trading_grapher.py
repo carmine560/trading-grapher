@@ -552,9 +552,10 @@ def save_market_data(config, trade_data, market_data_path):
         symbol_data[VOLUME] = symbol_data[VOLUME].astype("Int64")
 
         previous = symbol_data[symbol_data.index < trade_data["entry_date"]]
-        if not previous.empty:
+        previous_with_data = previous.dropna()
+        if not previous_with_data.empty:
             previous_date = pd.Timestamp.date(
-                previous.dropna().tail(1).index[0]
+                previous_with_data.tail(1).index[0]
             )
             previous_date = pd.Timestamp(
                 previous_date, tz=config["Market Data"]["timezone"]
@@ -564,7 +565,7 @@ def save_market_data(config, trade_data, market_data_path):
             hours=12
         )
 
-        if morning and not previous.empty:
+        if morning and not previous_with_data.empty:
             start = create_timestamp(
                 previous_date, config["Market Data"]["afternoon_session_start"]
             )
@@ -592,7 +593,7 @@ def save_market_data(config, trade_data, market_data_path):
             formalized[VOLUME], errors="coerce"
         ).astype("Int64")
 
-        if morning and not previous.empty:
+        if morning and not previous_with_data.empty:
             start = create_timestamp(
                 previous_date, config["Market Data"]["closing_time"]
             )
@@ -975,6 +976,16 @@ def plot_charts(
 # Low-Level Plotting Primitives
 
 
+def get_x(index, timestamp, method="ffill"):
+    """Map a real timestamp to a bar index for plotting."""
+    if index is None or len(index) == 0:
+        return None
+    if timestamp is None or pd.isna(timestamp):
+        return None
+    position = index.get_indexer([timestamp], method=method)[0]
+    return None if position == -1 else position
+
+
 def add_emas(config, formalized, addplot, style):
     """Add exponential moving average plots to the existing plots."""
     periods_and_colors = [
@@ -1131,16 +1142,6 @@ def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
     for index, _ in enumerate(axlist):
         if (index % 2) == 0:
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
-
-
-def get_x(index, timestamp, method="ffill"):
-    """Map a real timestamp to a bar index for plotting."""
-    if index is None or len(index) == 0:
-        return None
-    if timestamp is None or pd.isna(timestamp):
-        return None
-    position = index.get_indexer([timestamp], method=method)[0]
-    return None if position == -1 else position
 
 
 def add_vertical_elements(
