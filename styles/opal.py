@@ -1,4 +1,4 @@
-"""Configure the style settings for mplfinance plots."""
+"""Opal mplfinance plot style."""
 
 style = {
     "style_name": "opal",
