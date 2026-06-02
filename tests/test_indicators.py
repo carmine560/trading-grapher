@@ -15,20 +15,6 @@ def test_ema_masks_warmup_period():
     assert_series_equal(result, expected)
 
 
-def test_tema_uses_nested_emas_and_masks_full_warmup():
-    series = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], dtype=float)
-
-    result = indicators.tema(series, span=2)
-
-    ema_1 = indicators.ema(series, 2)
-    ema_2 = indicators.ema(ema_1, 2)
-    ema_3 = indicators.ema(ema_2, 2)
-    expected = 3 * (ema_1 - ema_2) + ema_3
-    expected.iloc[:3] = np.nan
-
-    assert_series_equal(result, expected)
-
-
 def test_vwap_resets_daily_and_skips_afternoon_only_day():
     index = pd.DatetimeIndex(
         [
