@@ -80,6 +80,60 @@ def test_main_exits_after_creating_launcher(monkeypatch):
     assert tg.main() is None
 
 
+def test_main_reports_invalid_cli_date_before_reading_journal(
+    monkeypatch,
+    capsys,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["not-a-date"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "read_trading_journal",
+        lambda trading_path, trading_sheet: pytest.fail(
+            "invalid dates should fail before reading the journal"
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "Invalid date. Expected format %Y-%m-%d" in captured.out
+    assert "not-a-date" in captured.out
+
+
 def test_main_fills_missing_trade_number_from_nan(monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     journal = pd.DataFrame(

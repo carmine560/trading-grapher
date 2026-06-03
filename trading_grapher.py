@@ -7,6 +7,7 @@ import configparser
 import importlib
 import os
 import sys
+from datetime import datetime
 
 import mplfinance as mpf
 import numpy as np
@@ -75,6 +76,16 @@ def main():
             return
         configure_exit(args, config_path, trading_path, trading_sheet)
 
+        try:
+            dates = [
+                pd.Timestamp(datetime.strptime(date, ISO_DATE_FORMAT))
+                for date in args.dates
+            ]
+        except ValueError as e:
+            raise MarketDataError(
+                f"Invalid date. Expected format {ISO_DATE_FORMAT}: {e}"
+            ) from e
+
         trading_journal = read_trading_journal(trading_path, trading_sheet)
         charts_directory = (
             args.d[0] if args.d else config["General"]["charts_directory"]
@@ -84,71 +95,15 @@ def main():
         )
         has_plotted = False
 
-        for date in pd.to_datetime(args.dates):
-            trades = trading_journal.loc[
-                trading_journal[config["Trading Journal"]["entry_date"]]
-                == date
-            ]
-            if not trades.empty:
-                first_index = next(trades.iterrows())[0]
-                for index, trade in trades.iterrows():
-                    trade_data = {
-                        column: trade.get(config["Trading Journal"][column])
-                        for column in TRADING_JOURNAL_COLUMNS
-                    }
-                    _validate_trade_data(trade_data, index)
-
-                    if pd.isna(trade_data["optional_number"]):
-                        trade_data["optional_number"] = index - first_index + 1
-
-                    trade_data["entry_date"] = trade_data[
-                        "entry_date"
-                    ].tz_localize(config["Market Data"]["timezone"])
-
-                    trade_data["order_specification"] = trade_data[
-                        "order_specification"
-                    ].lower()
-                    session = (
-                        "am"
-                        if pd.Timedelta(str(trade_data["exit_time"]))
-                        < pd.Timedelta(hours=12)
-                        else "pm"
-                    )
-                    market_data_path = os.path.join(
-                        charts_directory,
-                        f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
-                        f"-{session}-{trade_data['symbol']}.csv",
-                    )
-
-                    style_name = "fluorite"
-                    for option in config.options("Styles"):
-                        key, value = evaluate_value(config["Styles"][option])
-                        field_value = trade_data.get(key)
-                        if pd.isna(field_value):
-                            continue
-                        if str(value) in str(field_value):
-                            style_name = option
-                            break
-
-                    try:
-                        style = importlib.import_module(
-                            f"styles.{style_name}"
-                        ).style
-                    except ModuleNotFoundError as e:
-                        raise MarketDataError(
-                            f"Unable to load style '{style_name}': {e}"
-                        ) from e
-
-                    save_market_data(config, trade_data, market_data_path)
-                    plot_charts(
-                        config,
-                        trade_data,
-                        market_data_path,
-                        charts_directory,
-                        interval,
-                        style,
-                    )
-                    has_plotted = True
+        # Run the directory discrepancy check later if any chart was plotted.
+        for date in dates:
+            has_plotted |= plot_trades_for_date(
+                config,
+                trading_journal,
+                date,
+                charts_directory,
+                interval,
+            )
 
         if has_plotted:
             report_chart_directory_discrepancies(
@@ -159,6 +114,76 @@ def main():
     except MarketDataError as e:
         print(e)
         sys.exit(1)
+
+
+def plot_trades_for_date(
+    config, trading_journal, date, charts_directory, interval
+):
+    """Plot all trades for a single journal date."""
+    trades = trading_journal.loc[
+        trading_journal[config["Trading Journal"]["entry_date"]] == date
+    ]
+    if trades.empty:
+        return False
+
+    first_index = next(trades.iterrows())[0]
+    for index, trade in trades.iterrows():
+        trade_data = {
+            column: trade.get(config["Trading Journal"][column])
+            for column in TRADING_JOURNAL_COLUMNS
+        }
+        _validate_trade_data(trade_data, index)
+
+        if pd.isna(trade_data["optional_number"]):
+            trade_data["optional_number"] = index - first_index + 1
+
+        trade_data["entry_date"] = trade_data["entry_date"].tz_localize(
+            config["Market Data"]["timezone"]
+        )
+
+        trade_data["order_specification"] = trade_data[
+            "order_specification"
+        ].lower()
+        session = (
+            "am"
+            if pd.Timedelta(str(trade_data["exit_time"]))
+            < pd.Timedelta(hours=12)
+            else "pm"
+        )
+        market_data_path = os.path.join(
+            charts_directory,
+            f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
+            f"-{session}-{trade_data['symbol']}.csv",
+        )
+
+        style_name = "fluorite"
+        for option in config.options("Styles"):
+            key, value = evaluate_value(config["Styles"][option])
+            field_value = trade_data.get(key)
+            if pd.isna(field_value):
+                continue
+            if str(value) in str(field_value):
+                style_name = option
+                break
+
+        try:
+            style = importlib.import_module(f"styles.{style_name}").style
+        except ModuleNotFoundError as e:
+            raise MarketDataError(
+                f"Unable to load style '{style_name}': {e}"
+            ) from e
+
+        save_market_data(config, trade_data, market_data_path)
+        plot_charts(
+            config,
+            trade_data,
+            market_data_path,
+            charts_directory,
+            interval,
+            style,
+        )
+
+    return True
 
 
 # CLI and Configuration
