@@ -55,10 +55,10 @@ def test_backup_file_prunes_old_backups(tmp_path):
     assert len(backups) == 2
     expected = [
         datetime.fromtimestamp(1_700_000_060).strftime(
-            "notes-%Y%m%dT%H%M%S.txt"
+            "notes-%Y%m%dT%H%M%S.000.txt"
         ),
         datetime.fromtimestamp(1_700_000_120).strftime(
-            "notes-%Y%m%dT%H%M%S.txt"
+            "notes-%Y%m%dT%H%M%S.000.txt"
         ),
     ]
     assert backups == expected
