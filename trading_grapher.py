@@ -16,11 +16,12 @@ import yfinance
 
 import indicators
 from core_utilities import data_utilities, file_utilities
+from core_utilities.config_common import ConfigError
 from core_utilities.config_diff import check_config_changes
 from core_utilities.config_io import read_config, write_file_atomically
 from core_utilities.config_prompt import modify_section
 from core_utilities.config_validation import evaluate_value
-from core_utilities.errors import MarketDataError
+from core_utilities.errors import CoreUtilitiesError, MarketDataError
 
 ISO_DATE_FORMAT = "%Y-%m-%d"
 TRADING_JOURNAL_COLUMNS = [
@@ -112,7 +113,7 @@ def main():
                 trading_journal,
                 charts_directory,
             )
-    except MarketDataError as e:
+    except (CoreUtilitiesError, ConfigError) as e:
         print(e)
         sys.exit(1)
 

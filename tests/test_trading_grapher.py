@@ -14,7 +14,9 @@ if "mplfinance" not in sys.modules:
 if "yfinance" not in sys.modules:
     sys.modules["yfinance"] = types.SimpleNamespace(Ticker=None)
 
+from core_utilities.config_common import ConfigError
 from core_utilities.errors import MarketDataError
+from core_utilities.errors import UtilityOperationError
 import trading_grapher as tg
 
 
@@ -78,6 +80,84 @@ def test_main_exits_after_creating_launcher(monkeypatch):
     )
 
     assert tg.main() is None
+
+
+def test_main_exits_cleanly_on_launcher_utility_error(monkeypatch, capsys):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+            BS=True,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: (_ for _ in ()).throw(
+            UtilityOperationError("launcher failed")
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "launcher failed" in captured.out
+    assert "Traceback" not in captured.err
+
+
+def test_main_exits_cleanly_on_config_error(monkeypatch, capsys):
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure",
+        lambda _: (_ for _ in ()).throw(ConfigError("config failed")),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "config failed" in captured.out
+    assert "Traceback" not in captured.err
 
 
 def test_main_reports_invalid_cli_date_before_reading_journal(
