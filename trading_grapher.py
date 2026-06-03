@@ -71,7 +71,8 @@ def main():
         )
         trading_sheet = config["General"]["trading_sheet"]
 
-        file_utilities.create_launchers_exit(args, __file__)
+        if file_utilities.create_launchers_exit(args, __file__):
+            return
         configure_exit(args, config_path, trading_path, trading_sheet)
 
         trading_journal = read_trading_journal(trading_path, trading_sheet)
@@ -146,22 +147,12 @@ def main():
                     )
                     has_plotted = True
 
-        if (
-            has_plotted
-            and config["Trading Journal"]["optional_chart_file"]
-            in trading_journal.columns
-        ):
-            discrepancies = file_utilities.compare_directory_list(
+        if has_plotted:
+            report_chart_directory_discrepancies(
+                config,
+                trading_journal,
                 charts_directory,
-                r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
-                trading_journal[
-                    config["Trading Journal"]["optional_chart_file"]
-                ],
             )
-            for path in discrepancies["unexpected_files"]:
-                print(f"The {path} file is not in the list.")
-            for path in discrepancies["missing_files"]:
-                print(f"The {path} file does not exist in the directory.")
     except MarketDataError as e:
         print(e)
         sys.exit(1)
@@ -387,6 +378,25 @@ def configure_exit(args, config_path, trading_path, trading_sheet):
             backup_parameters=backup_parameters,
         )
         sys.exit()
+
+
+def report_chart_directory_discrepancies(
+    config, trading_journal, charts_directory
+):
+    """Report missing and unexpected chart files from the journal list."""
+    chart_file_column = config["Trading Journal"]["optional_chart_file"]
+    if chart_file_column not in trading_journal.columns:
+        return
+
+    discrepancies = file_utilities.compare_directory_list(
+        charts_directory,
+        r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
+        trading_journal[chart_file_column],
+    )
+    for path in discrepancies["unexpected_files"]:
+        print(f"The {path} file is not in the list.")
+    for path in discrepancies["missing_files"]:
+        print(f"The {path} file does not exist in the directory.")
 
 
 # Time and Interval Utilities

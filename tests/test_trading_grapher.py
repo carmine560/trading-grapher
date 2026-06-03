@@ -25,6 +25,61 @@ def test_validate_interval_rejects_unknown_values():
     assert excinfo.value.code == 1
 
 
+def test_main_exits_after_creating_launcher(monkeypatch):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+            BS=True,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: True,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: pytest.fail(
+            "configure_exit should not run after launcher creation"
+        ),
+    )
+    monkeypatch.setattr(
+        tg,
+        "read_trading_journal",
+        lambda trading_path, trading_sheet: pytest.fail(
+            "trading journal should not be read after launcher creation"
+        ),
+    )
+    monkeypatch.setattr(
+        tg,
+        "save_market_data",
+        lambda *args, **kwargs: pytest.fail(
+            "market data should not be saved after launcher creation"
+        ),
+    )
+
+    assert tg.main() is None
+
+
 def test_main_fills_missing_trade_number_from_nan(monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     journal = pd.DataFrame(
