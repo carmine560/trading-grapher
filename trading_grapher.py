@@ -388,10 +388,16 @@ def report_chart_directory_discrepancies(
     if chart_file_column not in trading_journal.columns:
         return
 
+    chart_files = trading_journal[chart_file_column].dropna()
+    chart_files = chart_files[
+        chart_files.map(
+            lambda value: isinstance(value, str) and bool(value.strip())
+        )
+    ]
     discrepancies = file_utilities.compare_directory_list(
         charts_directory,
         r"\d{4}-\d{2}-\d{2}-\d{2}-\w+\.png",
-        trading_journal[chart_file_column],
+        chart_files,
     )
     for path in discrepancies["unexpected_files"]:
         print(f"The {path} file is not in the list.")

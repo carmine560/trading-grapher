@@ -229,6 +229,30 @@ def test_main_reports_chart_directory_discrepancies(monkeypatch, capsys):
     assert "/charts/missing.png file does not exist" in captured.out
 
 
+def test_report_chart_directory_discrepancies_ignores_blank_chart_files(
+    tmp_path,
+    capsys,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    journal = pd.DataFrame(
+        {
+            "Chart file": [
+                float("nan"),
+                "",
+                "   ",
+                "2024-01-02-01-1234.png",
+            ],
+        }
+    )
+
+    tg.report_chart_directory_discrepancies(config, journal, str(tmp_path))
+
+    captured = capsys.readouterr()
+    assert "nan" not in captured.out
+    assert f"{tmp_path}/ file does not exist" not in captured.out
+    assert "2024-01-02-01-1234.png file does not exist" in captured.out
+
+
 def test_main_reports_trading_journal_read_failure(monkeypatch, capsys):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     config["General"]["trading_path"] = "/tmp/missing.ods"
