@@ -123,7 +123,10 @@ def main():
                     style_name = "fluorite"
                     for option in config.options("Styles"):
                         key, value = evaluate_value(config["Styles"][option])
-                        if value in trade_data.get(key, []):
+                        field_value = trade_data.get(key)
+                        if pd.isna(field_value):
+                            continue
+                        if str(value) in str(field_value):
                             style_name = option
                             break
 

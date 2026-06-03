@@ -155,6 +155,71 @@ def test_main_fills_missing_trade_number_from_nan(monkeypatch):
     assert captured_trade_data["optional_number"] == 1
 
 
+def test_main_ignores_blank_optional_field_in_style_rule(monkeypatch):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Styles"]["amber"] = repr(("optional_tactic", "breakout"))
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+    imported_styles = []
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(tg, "save_market_data", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tg, "plot_charts", lambda *args, **kwargs: None)
+    real_import_module = tg.importlib.import_module
+
+    def fake_import_module(name):
+        if name in ("styles.amber", "styles.fluorite"):
+            imported_styles.append(name)
+            return SimpleNamespace(style={"custom_style": {}, "rc": {}})
+        return real_import_module(name)
+
+    monkeypatch.setattr(tg.importlib, "import_module", fake_import_module)
+
+    tg.main()
+
+    assert imported_styles == ["styles.fluorite"]
+
+
 def test_main_reports_chart_directory_discrepancies(monkeypatch, capsys):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     journal = pd.DataFrame(
