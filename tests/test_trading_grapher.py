@@ -1135,10 +1135,10 @@ def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
     )
     symbol_data = pd.DataFrame(
         {
-            tg.OPEN: [float("nan"), float("nan")],
-            tg.HIGH: [float("nan"), float("nan")],
-            tg.LOW: [float("nan"), float("nan")],
-            tg.CLOSE: [float("nan"), float("nan")],
+            tg.OPEN: [100.0, float("nan")],
+            tg.HIGH: [101.0, float("nan")],
+            tg.LOW: [99.0, float("nan")],
+            tg.CLOSE: [100.5, float("nan")],
             tg.VOLUME: [float("nan"), float("nan")],
         },
         index=index,
@@ -1173,6 +1173,59 @@ def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
 
     saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
     assert saved.isna().any().any()
+
+
+def test_save_market_data_rejects_all_missing_ohlc_after_session_filter(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "all-missing.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [float("nan"), float("nan")],
+            tg.HIGH: [float("nan"), float("nan")],
+            tg.LOW: [float("nan"), float("nan")],
+            tg.CLOSE: [float("nan"), float("nan")],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    )
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(MarketDataError, match="no usable OHLC rows"):
+        tg.save_market_data(config, trade_data, str(market_data_path))
 
 
 def test_save_market_data_handles_empty_prior_session(
@@ -1359,6 +1412,36 @@ def test_plot_charts_raises_market_data_error_on_csv_failure():
             "/tmp/does-not-exist.csv",
             "/tmp",
             "1m",
+            {},
+        )
+
+
+def test_plot_charts_rejects_all_missing_ohlc_after_resampling(tmp_path):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    market_data_path = tmp_path / "all-missing.csv"
+    index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
+    pd.DataFrame(
+        {
+            tg.OPEN: [float("nan"), float("nan")],
+            tg.HIGH: [float("nan"), float("nan")],
+            tg.LOW: [float("nan"), float("nan")],
+            tg.CLOSE: [float("nan"), float("nan")],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    ).to_csv(market_data_path)
+    trade_data = {
+        "optional_percentage_change": float("nan"),
+        "entry_price": 100.0,
+    }
+
+    with pytest.raises(MarketDataError, match="no usable OHLC rows"):
+        tg.plot_charts(
+            config,
+            trade_data,
+            str(market_data_path),
+            str(tmp_path),
+            "5m",
             {},
         )
 

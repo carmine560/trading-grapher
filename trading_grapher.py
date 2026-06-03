@@ -678,6 +678,12 @@ def save_market_data(config, trade_data, market_data_path):
             exclusion = pd.date_range(start=start, end=end, freq=freq)
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
 
+        if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
+            raise MarketDataError(
+                f"Market data for {trade_data['symbol']} has no usable "
+                "OHLC rows after session filtering."
+            )
+
         try:
             write_file_atomically(
                 market_data_path,
@@ -905,6 +911,11 @@ def plot_charts(
         ) from e
 
     formalized = resample_ohlcv(config, formalized, interval)
+    if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
+        raise MarketDataError(
+            f"Market data from {market_data_path} has no usable "
+            "OHLC rows after resampling."
+        )
 
     result = _calculate_trade_result(trade_data)
     if pd.isna(trade_data["optional_percentage_change"]):
