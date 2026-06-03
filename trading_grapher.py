@@ -90,6 +90,7 @@ def main():
         charts_directory = (
             args.d[0] if args.d else config["General"]["charts_directory"]
         )
+        file_utilities.check_directory(charts_directory)
         interval = validate_interval(
             args.i[0] if args.i else config["Chart"]["interval"]
         )

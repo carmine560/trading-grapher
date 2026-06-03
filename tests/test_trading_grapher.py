@@ -134,8 +134,9 @@ def test_main_reports_invalid_cli_date_before_reading_journal(
     assert "not-a-date" in captured.out
 
 
-def test_main_fills_missing_trade_number_from_nan(monkeypatch):
+def test_main_fills_missing_trade_number_from_nan(tmp_path, monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
     journal = pd.DataFrame(
         {
             "Number": [float("nan")],
@@ -209,8 +210,11 @@ def test_main_fills_missing_trade_number_from_nan(monkeypatch):
     assert captured_trade_data["optional_number"] == 1
 
 
-def test_main_ignores_blank_optional_field_in_style_rule(monkeypatch):
+def test_main_ignores_blank_optional_field_in_style_rule(
+    tmp_path, monkeypatch
+):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
     config["Styles"]["amber"] = repr(("optional_tactic", "breakout"))
     journal = pd.DataFrame(
         {
@@ -274,8 +278,94 @@ def test_main_ignores_blank_optional_field_in_style_rule(monkeypatch):
     assert imported_styles == ["styles.fluorite"]
 
 
-def test_main_reports_chart_directory_discrepancies(monkeypatch, capsys):
+def test_main_creates_missing_charts_directory_before_writing_outputs(
+    tmp_path,
+    monkeypatch,
+):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
+    charts_directory = tmp_path / "new-charts"
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=[str(charts_directory)],
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    real_import_module = tg.importlib.import_module
+
+    def fake_import_module(name):
+        if name == "styles.fluorite":
+            return SimpleNamespace(style={"custom_style": {}, "rc": {}})
+        return real_import_module(name)
+
+    def fake_save_market_data(config, trade_data, market_data_path):
+        assert charts_directory.is_dir()
+        assert market_data_path.startswith(str(charts_directory))
+        (charts_directory / "market.csv").write_text("", encoding="utf-8")
+
+    def fake_plot_charts(
+        config,
+        trade_data,
+        market_data_path,
+        charts_directory,
+        interval,
+        style,
+    ):
+        chart_path = tmp_path / "new-charts" / "chart.png"
+        chart_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(tg.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr(tg, "save_market_data", fake_save_market_data)
+    monkeypatch.setattr(tg, "plot_charts", fake_plot_charts)
+
+    tg.main()
+
+    assert (charts_directory / "market.csv").is_file()
+    assert (charts_directory / "chart.png").is_file()
+
+
+def test_main_reports_chart_directory_discrepancies(
+    tmp_path, monkeypatch, capsys
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
     journal = pd.DataFrame(
         {
             "Entry date": [pd.Timestamp("2024-01-02")],
@@ -475,8 +565,11 @@ def test_main_reports_column_configuration_read_failure(monkeypatch, capsys):
     assert "missing" in captured.out
 
 
-def test_main_exits_with_market_data_error_message(monkeypatch, capsys):
+def test_main_exits_with_market_data_error_message(
+    tmp_path, monkeypatch, capsys
+):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
     journal = pd.DataFrame(
         {
             "Entry date": [pd.Timestamp("2024-01-02")],
@@ -594,6 +687,7 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
     ],
 )
 def test_main_validates_trade_rows_before_processing(
+    tmp_path,
     monkeypatch,
     capsys,
     field,
@@ -601,6 +695,7 @@ def test_main_validates_trade_rows_before_processing(
     message,
 ):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
     journal = pd.DataFrame(
         {
             "Entry date": [pd.Timestamp("2024-01-02")],
