@@ -914,6 +914,67 @@ def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
     assert saved[tg.VOLUME].max() == 10
 
 
+def test_save_market_data_write_failure_preserves_existing_cache(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "2024-01-02-pm-1234.csv"
+    original_cache = (
+        f"{tg.DATETIME},{tg.OPEN},{tg.HIGH},{tg.LOW},{tg.CLOSE},{tg.VOLUME}\n"
+        "2024-01-02 09:00:00+09:00,1,2,0,1,10\n"
+    )
+    market_data_path.write_text(original_cache, encoding="utf-8")
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        "2024-01-02 09:01:00",
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    )
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    original_to_csv = pd.DataFrame.to_csv
+
+    def failing_to_csv(self, path_or_buf=None, *args, **kwargs):
+        if path_or_buf is not None and hasattr(path_or_buf, "write"):
+            path_or_buf.write("partial\n")
+            raise OSError("disk full")
+        return original_to_csv(self, path_or_buf, *args, **kwargs)
+
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+    monkeypatch.setattr(tg, "should_refresh_market_data", lambda *args: True)
+    monkeypatch.setattr(pd.DataFrame, "to_csv", failing_to_csv)
+
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(MarketDataError, match="Unable to write market data"):
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+    assert market_data_path.read_text(encoding="utf-8") == original_cache
+    assert not list(tmp_path.glob(f".{market_data_path.name}.*.tmp"))
+
+
 @pytest.mark.parametrize(
     "csv_content",
     [

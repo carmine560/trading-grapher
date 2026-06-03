@@ -17,7 +17,7 @@ import yfinance
 import indicators
 from core_utilities import data_utilities, file_utilities
 from core_utilities.config_diff import check_config_changes
-from core_utilities.config_io import read_config
+from core_utilities.config_io import read_config, write_file_atomically
 from core_utilities.config_prompt import modify_section
 from core_utilities.config_validation import evaluate_value
 from core_utilities.errors import MarketDataError
@@ -679,7 +679,12 @@ def save_market_data(config, trade_data, market_data_path):
             formalized = formalized.loc[~formalized.index.isin(exclusion)]
 
         try:
-            formalized.to_csv(market_data_path)
+            write_file_atomically(
+                market_data_path,
+                "w",
+                lambda f: formalized.to_csv(f),
+                newline="",
+            )
         except Exception as e:
             raise MarketDataError(
                 f"Unable to write market data to {market_data_path}: {e}"
