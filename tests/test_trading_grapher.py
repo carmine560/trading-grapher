@@ -676,6 +676,34 @@ def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
     assert saved[tg.VOLUME].max() == 10
 
 
+@pytest.mark.parametrize(
+    "csv_content",
+    [
+        "",
+        f"{tg.DATETIME},{tg.OPEN},{tg.HIGH},{tg.LOW},{tg.CLOSE},{tg.VOLUME}\n",
+    ],
+)
+def test_save_market_data_reports_unreadable_cached_csv(
+    tmp_path,
+    csv_content,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "bad-cache.csv"
+    market_data_path.write_text(csv_content, encoding="utf-8")
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(
+        MarketDataError,
+        match="Unable to read cached market data",
+    ):
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+
 def test_save_market_data_raises_market_data_error_on_fetch_failure(
     monkeypatch,
 ):

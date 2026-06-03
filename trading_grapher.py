@@ -521,10 +521,16 @@ def save_market_data(config, trade_data, market_data_path):
         0, tz=config["Market Data"]["timezone"]
     )
     if os.path.isfile(market_data_path):
-        formalized = pd.read_csv(
-            market_data_path, index_col=0, parse_dates=True
-        )
-        last_bar_time = formalized.tail(1).index[0]
+        try:
+            formalized = pd.read_csv(
+                market_data_path, index_col=0, parse_dates=True
+            )
+            last_bar_time = formalized.tail(1).index[0]
+        except Exception as e:
+            raise MarketDataError(
+                f"Unable to read cached market data from "
+                f"{market_data_path}: {e}"
+            ) from e
         modified_time = pd.Timestamp(
             os.path.getmtime(market_data_path),
             tz=config["Market Data"]["timezone"],
