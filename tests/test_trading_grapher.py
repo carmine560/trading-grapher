@@ -413,6 +413,7 @@ def test_main_exits_with_market_data_error_message(monkeypatch, capsys):
 def test_validate_trade_data_rejects_bad_entry_date(value, message):
     trade_data = {
         "entry_date": value,
+        "entry_time": pd.Timestamp("2024-01-02 09:00:00").time(),
         "symbol": "1234",
         "order_specification": "long",
         "exit_time": pd.Timestamp("2024-01-02 13:00:00").time(),
@@ -435,6 +436,12 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "Order specification",
             "   ",
             "Trade row 0 has empty order_specification.",
+        ),
+        ("Entry time", pd.NaT, "Trade row 0 is missing entry_time."),
+        (
+            "Entry time",
+            "abc",
+            "Trade row 0 has invalid entry_time: abc",
         ),
         (
             "Exit time",
@@ -505,6 +512,22 @@ def test_main_validates_trade_rows_before_processing(
     assert excinfo.value.code == 1
     captured = capsys.readouterr()
     assert message in captured.out
+
+
+def test_validate_trade_data_normalizes_entry_time_string():
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02"),
+        "entry_time": "09:00:00",
+        "symbol": "1234",
+        "order_specification": "long",
+        "exit_time": pd.Timestamp("2024-01-02 13:00:00").time(),
+    }
+
+    tg._validate_trade_data(trade_data, 0)
+
+    assert (
+        trade_data["entry_time"] == pd.Timestamp("1970-01-01 09:00:00").time()
+    )
 
 
 def test_resample_ohlcv_aggregates_and_drops_midday_break():

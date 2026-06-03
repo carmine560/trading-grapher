@@ -427,6 +427,17 @@ def _validate_trade_data(trade_data, row_index):
             f"Trade row {row_index} has empty order_specification."
         )
 
+    if pd.isna(trade_data["entry_time"]):
+        raise MarketDataError(f"Trade row {row_index} is missing entry_time.")
+    try:
+        entry_time = pd.Timedelta(str(trade_data["entry_time"]))
+    except (TypeError, ValueError) as e:
+        raise MarketDataError(
+            f"Trade row {row_index} has invalid entry_time: "
+            f"{trade_data['entry_time']}"
+        ) from e
+    trade_data["entry_time"] = (pd.Timestamp("1970-01-01") + entry_time).time()
+
     try:
         pd.Timedelta(str(trade_data["exit_time"]))
     except (TypeError, ValueError) as e:
