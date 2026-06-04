@@ -1,5 +1,6 @@
 import sys
 import types
+from datetime import date
 from types import SimpleNamespace
 
 import pandas as pd
@@ -212,6 +213,135 @@ def test_main_reports_invalid_cli_date_before_reading_journal(
     captured = capsys.readouterr()
     assert "Invalid date. Expected format %Y-%m-%d" in captured.out
     assert "not-a-date" in captured.out
+
+
+@pytest.mark.parametrize("entry_date", ["2024-01-02", date(2024, 1, 2)])
+def test_main_normalizes_non_timestamp_journal_entry_dates(
+    tmp_path, monkeypatch, entry_date
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
+    journal = pd.DataFrame(
+        {
+            "Entry date": [entry_date],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+    captured_trade_data = {}
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities, "get_config_path", lambda _: "/tmp/x"
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(tg, "save_market_data", lambda *args, **kwargs: None)
+
+    def fake_plot_charts(
+        config,
+        trade_data,
+        market_data_path,
+        charts_directory,
+        interval,
+        style,
+    ):
+        captured_trade_data.update(trade_data)
+
+    monkeypatch.setattr(tg, "plot_charts", fake_plot_charts)
+    real_import_module = tg.importlib.import_module
+
+    def fake_import_module(name):
+        if name == "styles.fluorite":
+            return SimpleNamespace(style={"custom_style": {}, "rc": {}})
+        return real_import_module(name)
+
+    monkeypatch.setattr(tg.importlib, "import_module", fake_import_module)
+
+    tg.main()
+
+    assert captured_trade_data["entry_date"] == pd.Timestamp(
+        "2024-01-02", tz=config["Market Data"]["timezone"]
+    )
+
+
+def test_main_reports_invalid_journal_entry_date(monkeypatch, capsys):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    journal = pd.DataFrame(
+        {
+            "Entry date": ["abc"],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities, "get_config_path", lambda _: "/tmp/x"
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "Trade row 0 has invalid entry_date: abc" in captured.out
 
 
 def test_main_fills_missing_trade_number_from_nan(tmp_path, monkeypatch):

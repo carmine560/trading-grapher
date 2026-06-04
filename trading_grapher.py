@@ -98,6 +98,29 @@ def main():
             ) from e
 
         trading_journal = read_trading_journal(trading_path, trading_sheet)
+        entry_date_column = config["Trading Journal"]["entry_date"]
+        if entry_date_column not in trading_journal.columns:
+            raise MarketDataError(
+                f"Trading journal is missing entry_date column "
+                f"'{entry_date_column}'."
+            )
+        raw_entry_dates = trading_journal[entry_date_column]
+        normalized_entry_dates = pd.to_datetime(
+            raw_entry_dates, errors="coerce"
+        )
+        invalid_entry_dates = (
+            normalized_entry_dates.isna() & raw_entry_dates.notna()
+        )
+        if invalid_entry_dates.any():
+            invalid_index = invalid_entry_dates[invalid_entry_dates].index[0]
+            raise MarketDataError(
+                f"Trade row {invalid_index} has invalid entry_date: "
+                f"{raw_entry_dates.loc[invalid_index]}"
+            )
+        trading_journal = trading_journal.copy()
+        trading_journal[entry_date_column] = (
+            normalized_entry_dates.dt.normalize()
+        )
         charts_directory = (
             args.d[0] if args.d else config["General"]["charts_directory"]
         )
