@@ -508,13 +508,16 @@ def _validate_trade_data(trade_data, row_index):
         ) from e
     trade_data["entry_time"] = (pd.Timestamp("1970-01-01") + entry_time).time()
 
+    if pd.isna(trade_data["exit_time"]):
+        raise MarketDataError(f"Trade row {row_index} is missing exit_time.")
     try:
-        pd.Timedelta(str(trade_data["exit_time"]))
+        exit_time = pd.Timedelta(str(trade_data["exit_time"]))
     except (TypeError, ValueError) as e:
         raise MarketDataError(
             f"Trade row {row_index} has invalid exit_time: "
             f"{trade_data['exit_time']}"
         ) from e
+    trade_data["exit_time"] = (pd.Timestamp("1970-01-01") + exit_time).time()
 
 
 def validate_interval(interval):

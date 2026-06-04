@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import types
 from datetime import date
@@ -6,7 +7,10 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-if "mplfinance" not in sys.modules:
+if (
+    "mplfinance" not in sys.modules
+    and importlib.util.find_spec("mplfinance") is None
+):
     sys.modules["mplfinance"] = types.SimpleNamespace(
         make_addplot=lambda *args, **kwargs: None,
         plot=lambda *args, **kwargs: (None, []),
@@ -889,6 +893,7 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "abc",
             "Trade row 0 has invalid entry_time: abc",
         ),
+        ("Exit time", pd.NaT, "Trade row 0 is missing exit_time."),
         (
             "Exit time",
             "abc",
@@ -962,19 +967,22 @@ def test_main_validates_trade_rows_before_processing(
     assert message in captured.out
 
 
-def test_validate_trade_data_normalizes_entry_time_string():
+def test_validate_trade_data_normalizes_time_strings():
     trade_data = {
         "entry_date": pd.Timestamp("2024-01-02"),
         "entry_time": "09:00:00",
         "symbol": "1234",
         "order_specification": "long",
-        "exit_time": pd.Timestamp("2024-01-02 13:00:00").time(),
+        "exit_time": "13:00:00",
     }
 
     tg._validate_trade_data(trade_data, 0)
 
     assert (
         trade_data["entry_time"] == pd.Timestamp("1970-01-01 09:00:00").time()
+    )
+    assert (
+        trade_data["exit_time"] == pd.Timestamp("1970-01-01 13:00:00").time()
     )
 
 
@@ -1746,6 +1754,59 @@ def test_plot_charts_rejects_all_missing_ohlc_after_resampling(tmp_path):
             "5m",
             {},
         )
+
+
+def test_plot_charts_writes_png_with_real_mplfinance(tmp_path):
+    if not hasattr(tg.mpf, "__file__"):
+        pytest.skip("mplfinance is not installed")
+
+    from styles.fluorite import style
+
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    for section in (
+        "Active Trading Hours",
+        "EMA",
+        "VWAP",
+        "MACD",
+        "Stochastics",
+        "Volume",
+        "Minor X-ticks",
+        "Tooltips",
+        "Text",
+    ):
+        config[section]["is_added"] = "False"
+
+    market_data_path = tmp_path / "market.csv"
+    index = pd.date_range("2024-01-02 09:00:00", periods=8, freq="min")
+    pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 100.4, 100.2, 100.7, 101.0, 101.2, 101.1, 101.4],
+            tg.HIGH: [100.5, 100.7, 100.8, 101.1, 101.4, 101.5, 101.6, 101.8],
+            tg.LOW: [99.8, 100.1, 100.0, 100.4, 100.8, 101.0, 100.9, 101.2],
+            tg.CLOSE: [100.4, 100.2, 100.7, 101.0, 101.2, 101.1, 101.4, 101.6],
+            tg.VOLUME: [100, 120, 110, 130, 125, 140, 135, 150],
+        },
+        index=index,
+    ).to_csv(market_data_path)
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02"),
+        "entry_time": pd.Timestamp("2024-01-02 09:01:00").time(),
+        "entry_price": 100.2,
+        "exit_time": pd.Timestamp("2024-01-02 09:06:00").time(),
+        "exit_price": 101.4,
+        "optional_percentage_change": float("nan"),
+        "optional_number": 1,
+        "symbol": "1234",
+        "order_specification": "long",
+    }
+
+    tg.plot_charts(
+        config, trade_data, str(market_data_path), str(tmp_path), "1m", style
+    )
+
+    chart_path = tmp_path / "2024-01-02-01-1234.png"
+    assert chart_path.is_file()
+    assert chart_path.stat().st_size > 0
 
 
 @pytest.mark.parametrize("entry_price", [0.0, float("nan")])
