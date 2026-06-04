@@ -7,6 +7,7 @@ import configparser
 import importlib
 import os
 import sys
+import tempfile
 from datetime import datetime
 from enum import Enum
 
@@ -813,6 +814,15 @@ def _calculate_trade_result(trade_data):
     return 0
 
 
+def _calculate_percentage_change(trade_data, result):
+    """Return the percentage change for a trade."""
+    if not pd.isna(trade_data["optional_percentage_change"]):
+        return trade_data["optional_percentage_change"]
+    if pd.isna(trade_data["entry_price"]) or trade_data["entry_price"] == 0:
+        return 0.0
+    return 100 * result / trade_data["entry_price"]
+
+
 def _prepare_parameters(config, formalized, trade_data, result, style):
     """Prepare timestamps, prices, and colors for entry and exit points."""
     timestamps = {
@@ -980,16 +990,7 @@ def plot_charts(
         )
 
     result = _calculate_trade_result(trade_data)
-    if pd.isna(trade_data["optional_percentage_change"]):
-        if (
-            pd.isna(trade_data["entry_price"])
-            or trade_data["entry_price"] == 0
-        ):
-            percentage_change = 0.0
-        else:
-            percentage_change = 100 * result / trade_data["entry_price"]
-    else:
-        percentage_change = trade_data["optional_percentage_change"]
+    percentage_change = _calculate_percentage_change(trade_data, result)
 
     timestamps, prices, colors = _prepare_parameters(
         config, formalized, trade_data, result, style
@@ -1103,14 +1104,44 @@ def plot_charts(
             interval,
         )
 
-    fig.savefig(
-        os.path.join(
-            charts_directory,
-            f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
-            f"-{int(trade_data['optional_number']):02}"
-            f"-{trade_data['symbol']}.png",
-        )
+    chart_path = os.path.join(
+        charts_directory,
+        f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)}"
+        f"-{int(trade_data['optional_number']):02}"
+        f"-{trade_data['symbol']}.png",
     )
+    fd, temporary_chart_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(chart_path)}.",
+        suffix=".tmp",
+        dir=charts_directory,
+    )
+    os.close(fd)
+    try:
+        fig.savefig(temporary_chart_path, format="png")
+        with open(temporary_chart_path, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(temporary_chart_path, chart_path)
+        try:
+            directory_fd = os.open(
+                charts_directory,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+            )
+        except OSError:
+            directory_fd = None
+        if directory_fd is not None:
+            try:
+                os.fsync(directory_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(directory_fd)
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to write chart to {chart_path}: {e}"
+        ) from e
+    finally:
+        if os.path.exists(temporary_chart_path):
+            os.remove(temporary_chart_path)
 
 
 # Low-Level Plotting Primitives
