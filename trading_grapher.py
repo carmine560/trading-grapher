@@ -8,6 +8,7 @@ import importlib
 import os
 import sys
 from datetime import datetime
+from enum import Enum
 
 import mplfinance as mpf
 import numpy as np
@@ -57,6 +58,15 @@ INTERVALS = {
 }
 MARKET_DATA_PERIOD_IN_DAYS = 7
 HALF_BAR_WIDTH = 0.5
+
+
+class RefreshDecision(Enum):
+    """Describe why market data should or should not be fetched."""
+
+    OUT_OF_RANGE = "out_of_range"
+    COOLDOWN = "cooldown"
+    CACHE_FRESH = "cache_fresh"
+    NEED_REFRESH = "need_refresh"
 
 
 # Entry Point
@@ -113,6 +123,7 @@ def main():
                 trading_journal,
                 charts_directory,
             )
+    # MarketDataError already inherits from CoreUtilitiesError.
     except (CoreUtilitiesError, ConfigError) as e:
         print(e)
         sys.exit(1)
@@ -531,7 +542,7 @@ def _validate_symbol_data(symbol_data, trade_data):
         )
 
 
-def should_refresh_market_data(
+def determine_market_data_refresh_decision(
     entry_date,
     last_bar_time,
     modified_time,
@@ -539,15 +550,21 @@ def should_refresh_market_data(
     delay_minutes,
     period_in_days,
 ):
-    """Return whether market data should be fetched from the provider."""
+    """Return the market-data refresh decision for the current cache state."""
     delta = now.normalize() - entry_date
+    # Yahoo Finance does not support requests beyond the recent market-data
+    # window for this trade date.
     if period_in_days <= delta.days:
-        return False
-    if last_bar_time + pd.Timedelta(minutes=delay_minutes) < modified_time:
-        return False
+        return RefreshDecision.OUT_OF_RANGE
+    # Avoid requesting Yahoo Finance again within one minute of the last
+    # cache update to reduce connection refusals from rapid retries.
     if now < modified_time + pd.Timedelta(minutes=1):
-        return False
-    return True
+        return RefreshDecision.COOLDOWN
+    # Do not refresh if the cached file already contains bars newer than the
+    # provider delay window.
+    if last_bar_time + pd.Timedelta(minutes=delay_minutes) < modified_time:
+        return RefreshDecision.CACHE_FRESH
+    return RefreshDecision.NEED_REFRESH
 
 
 def save_market_data(config, trade_data, market_data_path):
@@ -573,14 +590,15 @@ def save_market_data(config, trade_data, market_data_path):
             unit="s",
         )
 
-    if not should_refresh_market_data(
+    refresh_decision = determine_market_data_refresh_decision(
         trade_data["entry_date"],
         last_bar_time,
         modified_time,
         now,
         int(config["Market Data"]["delay"]),
         MARKET_DATA_PERIOD_IN_DAYS,
-    ):
+    )
+    if refresh_decision is not RefreshDecision.NEED_REFRESH:
         return
     else:
         interval = "1m"

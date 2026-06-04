@@ -888,39 +888,39 @@ def test_resample_ohlcv_aggregates_and_drops_midday_break():
             "1970-01-01 00:00:00+09:00",
             "1970-01-01 00:00:00+09:00",
             "2024-01-12 09:00:00+09:00",
-            True,
+            tg.RefreshDecision.NEED_REFRESH,
         ),
         (
             "2024-01-05 00:00:00+09:00",
             "1970-01-01 00:00:00+09:00",
             "1970-01-01 00:00:00+09:00",
             "2024-01-12 09:00:00+09:00",
-            False,
+            tg.RefreshDecision.OUT_OF_RANGE,
         ),
         (
             "2024-01-10 00:00:00+09:00",
             "2024-01-12 09:00:00+09:00",
             "2024-01-12 09:21:00+09:00",
             "2024-01-12 10:00:00+09:00",
-            False,
+            tg.RefreshDecision.CACHE_FRESH,
         ),
         (
             "2024-01-10 00:00:00+09:00",
             "2024-01-12 09:00:00+09:00",
             "2024-01-12 09:00:00+09:00",
             "2024-01-12 09:00:30+09:00",
-            False,
+            tg.RefreshDecision.COOLDOWN,
         ),
     ],
 )
-def test_should_refresh_market_data_handles_refresh_gate(
+def test_determine_market_data_refresh_decision_handles_refresh_gate(
     entry_date,
     last_bar_time,
     modified_time,
     now,
     expected,
 ):
-    result = tg.should_refresh_market_data(
+    result = tg.determine_market_data_refresh_decision(
         pd.Timestamp(entry_date),
         pd.Timestamp(last_bar_time),
         pd.Timestamp(modified_time),
@@ -1039,7 +1039,11 @@ def test_save_market_data_write_failure_preserves_existing_cache(
         return original_to_csv(self, path_or_buf, *args, **kwargs)
 
     monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
-    monkeypatch.setattr(tg, "should_refresh_market_data", lambda *args: True)
+    monkeypatch.setattr(
+        tg,
+        "determine_market_data_refresh_decision",
+        lambda *args: tg.RefreshDecision.NEED_REFRESH,
+    )
     monkeypatch.setattr(pd.DataFrame, "to_csv", failing_to_csv)
 
     trade_data = {
