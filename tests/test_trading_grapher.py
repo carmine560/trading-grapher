@@ -1594,7 +1594,7 @@ def test_save_market_data_rejects_cached_csv_missing_ohlcv_columns(
         tg.save_market_data(config, trade_data, str(market_data_path))
 
 
-def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
+def test_save_market_data_rejects_sparse_volume_rows(tmp_path, monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     timezone = config["Market Data"]["timezone"]
     market_data_path = tmp_path / "sparse.csv"
@@ -1640,10 +1640,11 @@ def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
         "symbol": "1234",
     }
 
-    tg.save_market_data(config, trade_data, str(market_data_path))
-
-    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
-    assert saved.isna().any().any()
+    with pytest.raises(
+        MarketDataError,
+        match="has no usable OHLC rows after session filtering",
+    ):
+        tg.save_market_data(config, trade_data, str(market_data_path))
 
 
 def test_save_market_data_rejects_all_missing_ohlc_after_session_filter(
@@ -2193,6 +2194,53 @@ def test_plot_charts_uses_zero_percentage_when_entry_price_is_invalid(
     )
 
     assert captured["percentage_change"] == 0.0
+
+
+def test_prepare_parameters_ignores_rows_with_missing_volume():
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2024-01-01 15:29:00", tz=timezone),
+            pd.Timestamp("2024-01-02 09:00:00", tz=timezone),
+        ]
+    )
+    formalized = pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: [float("nan"), float("nan")],
+        },
+        index=index,
+    )
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "entry_time": pd.NaT,
+        "entry_price": float("nan"),
+        "exit_time": pd.NaT,
+        "exit_price": float("nan"),
+    }
+    style = {
+        "rc": {"axes.edgecolor": "gray"},
+        "custom_style": {
+            "neutral_color": "gray",
+            "profit_color": "green",
+            "loss_color": "red",
+        },
+    }
+
+    _, prices, _ = tg._prepare_parameters(
+        config,
+        formalized,
+        trade_data,
+        result=0,
+        style=style,
+    )
+
+    assert prices["closing"] == 0.0
+    assert prices["opening"] == 0.0
 
 
 def test_get_x_returns_none_for_unmatched_timestamp():

@@ -48,6 +48,8 @@ LOW = "Low"
 CLOSE = "Close"
 VOLUME = "Volume"
 
+OHLCV_COLUMNS = (OPEN, HIGH, LOW, CLOSE, VOLUME)
+
 DATE_FORMAT = "%b %-d"
 TIME_FORMAT = "%-H:%M"
 
@@ -581,7 +583,7 @@ def _validate_symbol_data(symbol_data, trade_data):
             f"No market data returned for {trade_data['symbol']}."
         )
 
-    required_columns = {OPEN, HIGH, LOW, CLOSE, VOLUME}
+    required_columns = set(OHLCV_COLUMNS)
     missing_columns = required_columns.difference(symbol_data.columns)
     if missing_columns:
         missing_text = ", ".join(sorted(missing_columns))
@@ -665,7 +667,7 @@ def _build_formalized_market_data(
     formalized = pd.DataFrame(
         symbol_data,
         index=pd.date_range(start, end, freq=freq),
-        columns=(OPEN, HIGH, LOW, CLOSE, VOLUME),
+        columns=OHLCV_COLUMNS,
     )
     formalized.index.name = DATETIME
     formalized[VOLUME] = pd.to_numeric(
@@ -711,7 +713,7 @@ def save_market_data(config, trade_data, market_data_path):
             formalized = pd.read_csv(
                 market_data_path, index_col=0, parse_dates=True
             )
-            required_columns = {OPEN, HIGH, LOW, CLOSE, VOLUME}
+            required_columns = set(OHLCV_COLUMNS)
             missing_columns = required_columns.difference(formalized.columns)
             if missing_columns:
                 missing_text = ", ".join(sorted(missing_columns))
@@ -764,7 +766,7 @@ def save_market_data(config, trade_data, market_data_path):
         config, trade_data, symbol_data, interval, freq, bar_timedelta
     )
 
-    if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
+    if not formalized[list(OHLCV_COLUMNS)].notna().all(axis=1).any():
         raise MarketDataError(
             f"Market data for {trade_data['symbol']} has no usable "
             "OHLC rows after session filtering."
@@ -883,8 +885,8 @@ def _prepare_parameters(config, formalized, trade_data, result, style):
     previous = formalized[formalized.index < trade_data["entry_date"]]
     current = formalized[trade_data["entry_date"] <= formalized.index]
     if previous.notnull().values.any():
-        previous = previous.dropna()
-        current = current.dropna()
+        previous = previous.dropna(subset=list(OHLCV_COLUMNS))
+        current = current.dropna(subset=list(OHLCV_COLUMNS))
         if not previous.empty:
             prices["closing"] = previous.tail(1)[CLOSE].iloc[0]
         if not current.empty:
@@ -1015,7 +1017,7 @@ def plot_charts(
         ) from e
 
     formalized = resample_ohlcv(config, formalized, interval)
-    if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
+    if not formalized[list(OHLCV_COLUMNS)].notna().all(axis=1).any():
         raise MarketDataError(
             f"Market data from {market_data_path} has no usable "
             "OHLC rows after resampling."
