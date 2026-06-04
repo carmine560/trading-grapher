@@ -1406,6 +1406,34 @@ def test_save_market_data_write_failure_preserves_existing_cache(
     assert not list(tmp_path.glob(f".{market_data_path.name}.*.tmp"))
 
 
+def test_save_market_data_reports_out_of_range_missing_cache(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "2024-01-02-pm-1234.csv"
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    monkeypatch.setattr(
+        tg,
+        "determine_market_data_refresh_decision",
+        lambda *args: tg.RefreshDecision.OUT_OF_RANGE,
+    )
+
+    with pytest.raises(MarketDataError) as excinfo:
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+    message = str(excinfo.value)
+    assert "2024-01-02" in message
+    assert str(market_data_path) in message
+    assert f"{tg.MARKET_DATA_PERIOD_IN_DAYS} days" in message
+
+
 @pytest.mark.parametrize(
     "csv_content",
     [

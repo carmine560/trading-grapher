@@ -744,6 +744,18 @@ def save_market_data(config, trade_data, market_data_path):
         MARKET_DATA_PERIOD_IN_DAYS,
     )
     if refresh_decision is not RefreshDecision.NEED_REFRESH:
+        if (
+            refresh_decision is RefreshDecision.OUT_OF_RANGE
+            and not os.path.isfile(market_data_path)
+        ):
+            raise MarketDataError(
+                f"No cached market data exists for "
+                f"{trade_data['symbol']} on "
+                f"{trade_data['entry_date'].strftime(ISO_DATE_FORMAT)} "
+                f"at {market_data_path}. Yahoo Finance 1m data is only "
+                f"requested within the last {MARKET_DATA_PERIOD_IN_DAYS} "
+                "days."
+            )
         return
     interval = "1m"
     freq = INTERVALS[interval]["freq"]
