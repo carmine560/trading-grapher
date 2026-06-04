@@ -689,7 +689,17 @@ def save_market_data(config, trade_data, market_data_path):
             formalized = pd.read_csv(
                 market_data_path, index_col=0, parse_dates=True
             )
+            required_columns = {OPEN, HIGH, LOW, CLOSE, VOLUME}
+            missing_columns = required_columns.difference(formalized.columns)
+            if missing_columns:
+                missing_text = ", ".join(sorted(missing_columns))
+                raise MarketDataError(
+                    f"Cached market data from {market_data_path} "
+                    f"is missing columns: {missing_text}"
+                )
             last_bar_time = formalized.tail(1).index[0]
+        except MarketDataError:
+            raise
         except Exception as e:
             raise MarketDataError(
                 f"Unable to read cached market data from "

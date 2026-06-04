@@ -1433,6 +1433,46 @@ def test_save_market_data_rejects_missing_ohlcv_columns(
         tg.save_market_data(config, trade_data, str(market_data_path))
 
 
+def test_save_market_data_rejects_cached_csv_missing_ohlcv_columns(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "cached-missing-volume.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+        },
+        index=index,
+    ).to_csv(market_data_path)
+    monkeypatch.setattr(
+        tg,
+        "determine_market_data_refresh_decision",
+        lambda *args: tg.RefreshDecision.CACHE_FRESH,
+    )
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    with pytest.raises(
+        MarketDataError,
+        match="Cached market data .* missing columns: Volume",
+    ):
+        tg.save_market_data(config, trade_data, str(market_data_path))
+
+
 def test_save_market_data_allows_sparse_ohlcv_rows(tmp_path, monkeypatch):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     timezone = config["Market Data"]["timezone"]
