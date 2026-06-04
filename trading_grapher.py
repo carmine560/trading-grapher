@@ -473,8 +473,8 @@ def report_chart_directory_discrepancies(
 # Time and Interval Utilities
 
 
-def _validate_trade_data(trade_data, row_index):
-    """Validate required trade-row fields before transformation."""
+def _validate_trade_entry_date(trade_data, row_index):
+    """Normalize and validate the trade entry date."""
     if pd.isna(trade_data["entry_date"]):
         raise MarketDataError(f"Trade row {row_index} is missing entry_date.")
     try:
@@ -484,6 +484,46 @@ def _validate_trade_data(trade_data, row_index):
             f"Trade row {row_index} has invalid entry_date: "
             f"{trade_data['entry_date']}"
         ) from e
+
+
+def _validate_trade_time(trade_data, row_index, field_name):
+    """Normalize and validate a trade time field."""
+    if pd.isna(trade_data[field_name]):
+        raise MarketDataError(
+            f"Trade row {row_index} is missing {field_name}."
+        )
+    try:
+        time_value = pd.Timedelta(str(trade_data[field_name]))
+    except (TypeError, ValueError) as e:
+        raise MarketDataError(
+            f"Trade row {row_index} has invalid {field_name}: "
+            f"{trade_data[field_name]}"
+        ) from e
+    trade_data[field_name] = (pd.Timestamp("1970-01-01") + time_value).time()
+
+
+def _validate_trade_numeric_fields(trade_data, row_index):
+    """Normalize and validate optional numeric trade fields."""
+    for field in (
+        "optional_number",
+        "entry_price",
+        "exit_price",
+        "optional_percentage_change",
+    ):
+        value = trade_data.get(field)
+        if pd.isna(value):
+            continue
+        try:
+            trade_data[field] = pd.to_numeric(value)
+        except (TypeError, ValueError) as e:
+            raise MarketDataError(
+                f"Trade row {row_index} has invalid {field}: {value}"
+            ) from e
+
+
+def _validate_trade_data(trade_data, row_index):
+    """Validate required trade-row fields before transformation."""
+    _validate_trade_entry_date(trade_data, row_index)
 
     if not trade_data["symbol"] or pd.isna(trade_data["symbol"]):
         raise MarketDataError(f"Trade row {row_index} is missing symbol.")
@@ -498,27 +538,9 @@ def _validate_trade_data(trade_data, row_index):
             f"Trade row {row_index} has empty order_specification."
         )
 
-    if pd.isna(trade_data["entry_time"]):
-        raise MarketDataError(f"Trade row {row_index} is missing entry_time.")
-    try:
-        entry_time = pd.Timedelta(str(trade_data["entry_time"]))
-    except (TypeError, ValueError) as e:
-        raise MarketDataError(
-            f"Trade row {row_index} has invalid entry_time: "
-            f"{trade_data['entry_time']}"
-        ) from e
-    trade_data["entry_time"] = (pd.Timestamp("1970-01-01") + entry_time).time()
-
-    if pd.isna(trade_data["exit_time"]):
-        raise MarketDataError(f"Trade row {row_index} is missing exit_time.")
-    try:
-        exit_time = pd.Timedelta(str(trade_data["exit_time"]))
-    except (TypeError, ValueError) as e:
-        raise MarketDataError(
-            f"Trade row {row_index} has invalid exit_time: "
-            f"{trade_data['exit_time']}"
-        ) from e
-    trade_data["exit_time"] = (pd.Timestamp("1970-01-01") + exit_time).time()
+    _validate_trade_numeric_fields(trade_data, row_index)
+    _validate_trade_time(trade_data, row_index, "entry_time")
+    _validate_trade_time(trade_data, row_index, "exit_time")
 
 
 def validate_interval(interval):

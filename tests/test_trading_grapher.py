@@ -887,6 +887,26 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "   ",
             "Trade row 0 has empty order_specification.",
         ),
+        (
+            "Number",
+            "abc",
+            "Trade row 0 has invalid optional_number: abc",
+        ),
+        (
+            "Entry price",
+            "abc",
+            "Trade row 0 has invalid entry_price: abc",
+        ),
+        (
+            "Exit price",
+            "abc",
+            "Trade row 0 has invalid exit_price: abc",
+        ),
+        (
+            "Percentage change",
+            "abc",
+            "Trade row 0 has invalid optional_percentage_change: abc",
+        ),
         ("Entry time", pd.NaT, "Trade row 0 is missing entry_time."),
         (
             "Entry time",
@@ -922,6 +942,8 @@ def test_main_validates_trade_rows_before_processing(
             "Exit price": [101.0],
         }
     )
+    if field in journal.columns:
+        journal[field] = journal[field].astype(object)
     journal.loc[0, field] = value
 
     monkeypatch.setattr(
