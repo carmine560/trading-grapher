@@ -1021,120 +1021,90 @@ def plot_charts(
             "OHLC rows after resampling."
         )
 
-    result = _calculate_trade_result(trade_data)
-    percentage_change = _calculate_percentage_change(trade_data, result)
+    try:
+        result = _calculate_trade_result(trade_data)
+        percentage_change = _calculate_percentage_change(trade_data, result)
 
-    timestamps, prices, colors = _prepare_parameters(
-        config, formalized, trade_data, result, style
-    )
-
-    addplot = []
-    panel = 0
-    panel, stochastics_panel = _add_indicators(
-        config, formalized, addplot, style, panel
-    )
-
-    fig, axlist = mpf.plot(
-        formalized,
-        addplot=addplot,
-        closefig=True,
-        datetime_format=f"{DATE_FORMAT}, {TIME_FORMAT}",
-        figsize=(
-            int(config["Chart"]["width"]) / 100,
-            int(config["Chart"]["height"]) / 100,
-        ),
-        fill_between=dict(
-            alpha=style["custom_style"]["filled_area_alpha"],
-            color=colors["exit"],
-            y1=trade_data["entry_price"],
-            y2=trade_data["exit_price"],
-            zorder=1,
-        ),
-        hlines=dict(
-            alpha=style["custom_style"]["line_alpha"],
-            colors=list(colors.values()),
-            hlines=list(prices.values()),
-            linestyle=[
-                style["custom_style"]["closing_line"],
-                style["custom_style"]["opening_line"],
-                style["custom_style"]["entry_line"],
-                style["custom_style"]["exit_line"],
-            ],
-            linewidths=1,
-        ),
-        returnfig=True,
-        scale_padding={
-            "top": float(config["Chart"]["scale_padding_top"]),
-            "right": float(config["Chart"]["scale_padding_right"]),
-            "bottom": float(config["Chart"]["scale_padding_bottom"]),
-            "left": float(config["Chart"]["scale_padding_left"]),
-        },
-        scale_width_adjustment=dict(candle=1.5),
-        style=style,
-        tight_layout=True,
-        type="candle",
-        volume=config["Volume"].getboolean("is_added"),
-        volume_panel=panel,
-    )
-
-    add_vertical_elements(
-        formalized,
-        timestamps,
-        axlist,
-        colors,
-        style,
-        config["Active Trading Hours"].getboolean("is_added"),
-    )
-
-    minutes = get_interval_minutes(interval)
-    major_tick_step = 30 / minutes
-    minor_tick_step = 10 / minutes
-    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
-    if config["Minor X-ticks"].getboolean("is_added"):
-        add_minor_xticks(
-            axlist,
-            style["custom_style"]["minor_grid_alpha"],
-            minor_tick_step,
+        timestamps, prices, colors = _prepare_parameters(
+            config, formalized, trade_data, result, style
         )
 
-    if stochastics_panel is not None:
-        axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
-
-    _add_all_tooltips(
-        config,
-        axlist,
-        formalized,
-        trade_data,
-        prices,
-        timestamps,
-        result,
-        percentage_change,
-        style,
-        colors,
-    )
-
-    if config["Text"].getboolean("is_added"):
-        tactic = trade_data["optional_tactic"]
-        full_date_format = f"%a, {DATE_FORMAT}, ’%y,"
-        notes = [
-            trade_data[f"optional_note_{i}"]
-            for i in range(1, 11)
-            if trade_data[f"optional_note_{i}"]
-        ]
-        add_text(
-            axlist,
-            float(config["Text"]["default_y_offset_ratio"]),
-            f"Trade {trade_data['optional_number']}"
-            f" for {trade_data['symbol']}"
-            f" using {trade_data['order_specification'].title()}"
-            f"{f'—{tactic.title()}' if pd.notna(tactic) else ''}\n"
-            f"on {trade_data['entry_date'].strftime(full_date_format)}"
-            f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}",
-            pd.Series(notes).dropna(),
-            style["facecolor"],
-            style["custom_style"]["text_bbox_alpha"],
-            interval,
+        addplot = []
+        panel = 0
+        panel, stochastics_panel = _add_indicators(
+            config, formalized, addplot, style, panel
         )
+
+        fig, axlist = mpf.plot(
+            formalized,
+            addplot=addplot,
+            closefig=True,
+            datetime_format=f"{DATE_FORMAT}, {TIME_FORMAT}",
+            figsize=(
+                int(config["Chart"]["width"]) / 100,
+                int(config["Chart"]["height"]) / 100,
+            ),
+            fill_between=dict(
+                alpha=style["custom_style"]["filled_area_alpha"],
+                color=colors["exit"],
+                y1=trade_data["entry_price"],
+                y2=trade_data["exit_price"],
+                zorder=1,
+            ),
+            hlines=dict(
+                alpha=style["custom_style"]["line_alpha"],
+                colors=list(colors.values()),
+                hlines=list(prices.values()),
+                linestyle=[
+                    style["custom_style"]["closing_line"],
+                    style["custom_style"]["opening_line"],
+                    style["custom_style"]["entry_line"],
+                    style["custom_style"]["exit_line"],
+                ],
+                linewidths=1,
+            ),
+            returnfig=True,
+            scale_padding={
+                "top": float(config["Chart"]["scale_padding_top"]),
+                "right": float(config["Chart"]["scale_padding_right"]),
+                "bottom": float(config["Chart"]["scale_padding_bottom"]),
+                "left": float(config["Chart"]["scale_padding_left"]),
+            },
+            scale_width_adjustment=dict(candle=1.5),
+            style=style,
+            tight_layout=True,
+            type="candle",
+            volume=config["Volume"].getboolean("is_added"),
+            volume_panel=panel,
+        )
+
+        add_vertical_elements(
+            formalized,
+            timestamps,
+            axlist,
+            colors,
+            style,
+            config["Active Trading Hours"].getboolean("is_added"),
+        )
+
+        add_axis_ticks(config, axlist, style, interval, stochastics_panel)
+        _add_all_tooltips(
+            config,
+            axlist,
+            formalized,
+            trade_data,
+            prices,
+            timestamps,
+            result,
+            percentage_change,
+            style,
+            colors,
+        )
+        _add_trade_text(config, axlist, trade_data, style, interval)
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to render chart from {market_data_path}: {e}"
+        ) from e
 
     chart_path = os.path.join(
         charts_directory,
@@ -1347,6 +1317,23 @@ def add_minor_xticks(axlist, minor_grid_alpha, minor_tick_step):
             axlist[index].grid(which="minor", alpha=minor_grid_alpha)
 
 
+def add_axis_ticks(config, axlist, style, interval, stochastics_panel):
+    """Add chart x-axis ticks and stochastic panel y-axis reference ticks."""
+    minutes = get_interval_minutes(interval)
+    major_tick_step = 30 / minutes
+    minor_tick_step = 10 / minutes
+    axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
+    if config["Minor X-ticks"].getboolean("is_added"):
+        add_minor_xticks(
+            axlist,
+            style["custom_style"]["minor_grid_alpha"],
+            minor_tick_step,
+        )
+
+    if stochastics_panel is not None:
+        axlist[2 * stochastics_panel].set_yticks([20.0, 50.0, 80.0])
+
+
 def add_vertical_elements(
     formalized,
     timestamps,
@@ -1516,6 +1503,34 @@ def add_text(
                 fc=bbox_color,
             ),
         )
+
+
+def _add_trade_text(config, axlist, trade_data, style, interval):
+    """Add the trade summary text block when enabled."""
+    if not config["Text"].getboolean("is_added"):
+        return
+
+    tactic = trade_data["optional_tactic"]
+    full_date_format = f"%a, {DATE_FORMAT}, ’%y,"
+    notes = [
+        trade_data[f"optional_note_{i}"]
+        for i in range(1, 11)
+        if trade_data[f"optional_note_{i}"]
+    ]
+    add_text(
+        axlist,
+        float(config["Text"]["default_y_offset_ratio"]),
+        f"Trade {trade_data['optional_number']}"
+        f" for {trade_data['symbol']}"
+        f" using {trade_data['order_specification'].title()}"
+        f"{f'—{tactic.title()}' if pd.notna(tactic) else ''}\n"
+        f"on {trade_data['entry_date'].strftime(full_date_format)}"
+        f" at {trade_data['entry_time'].strftime(TIME_FORMAT)}",
+        pd.Series(notes).dropna(),
+        style["facecolor"],
+        style["custom_style"]["text_bbox_alpha"],
+        interval,
+    )
 
 
 if __name__ == "__main__":

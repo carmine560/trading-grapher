@@ -853,6 +853,105 @@ def test_main_exits_with_market_data_error_message(
     assert "market data refresh failed" in captured.out
 
 
+def test_main_exits_cleanly_on_chart_render_failure(
+    tmp_path, monkeypatch, capsys
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
+    for section in (
+        "Active Trading Hours",
+        "EMA",
+        "VWAP",
+        "MACD",
+        "Stochastics",
+        "Volume",
+        "Minor X-ticks",
+        "Tooltips",
+        "Text",
+    ):
+        config[section]["is_added"] = "False"
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 09:01:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+
+    def fake_save_market_data(config, trade_data, market_data_path):
+        index = pd.date_range(
+            "2024-01-02 09:00:00",
+            periods=2,
+            freq="min",
+            tz=config["Market Data"]["timezone"],
+        )
+        pd.DataFrame(
+            {
+                tg.OPEN: [100.0, 101.0],
+                tg.HIGH: [101.0, 102.0],
+                tg.LOW: [99.0, 100.0],
+                tg.CLOSE: [100.5, 101.5],
+                tg.VOLUME: [10, 20],
+            },
+            index=index,
+        ).to_csv(market_data_path)
+
+    monkeypatch.setattr(tg, "save_market_data", fake_save_market_data)
+    monkeypatch.setattr(
+        tg.mpf,
+        "plot",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("render failed")
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "Unable to render chart from" in captured.out
+    assert "render failed" in captured.out
+    assert "Traceback" not in captured.err
+
+
 @pytest.mark.parametrize(
     ("value", "message"),
     [
