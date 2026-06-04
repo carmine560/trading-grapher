@@ -567,6 +567,90 @@ def determine_market_data_refresh_decision(
     return RefreshDecision.NEED_REFRESH
 
 
+def _build_formalized_market_data(
+    config, trade_data, symbol_data, interval, freq, bar_timedelta
+):
+    """Shape raw provider data into the cache layout for one trade."""
+    _validate_symbol_data(symbol_data, trade_data)
+    symbol_data[VOLUME] = pd.to_numeric(symbol_data[VOLUME], errors="coerce")
+
+    volume_threshold = symbol_data[VOLUME].quantile(
+        float(config["Volume"]["quantile_threshold"])
+    )
+    if pd.notna(volume_threshold):
+        symbol_data[VOLUME] = symbol_data[VOLUME].clip(
+            upper=int(volume_threshold)
+        )
+    symbol_data[VOLUME] = symbol_data[VOLUME].astype("Int64")
+
+    previous = symbol_data[symbol_data.index < trade_data["entry_date"]]
+    previous_with_data = previous.dropna()
+    if not previous_with_data.empty:
+        previous_date = pd.Timestamp.date(previous_with_data.tail(1).index[0])
+        previous_date = pd.Timestamp(
+            previous_date, tz=config["Market Data"]["timezone"]
+        )
+
+    morning = pd.Timedelta(str(trade_data["exit_time"])) < pd.Timedelta(
+        hours=12
+    )
+
+    if morning and not previous_with_data.empty:
+        start = create_timestamp(
+            previous_date, config["Market Data"]["afternoon_session_start"]
+        )
+        end = create_timestamp(
+            trade_data["entry_date"],
+            config["Market Data"]["morning_session_end"],
+        )
+        end -= bar_timedelta
+    else:
+        start = create_timestamp(
+            trade_data["entry_date"], config["Market Data"]["opening_time"]
+        )
+        end = create_timestamp(
+            trade_data["entry_date"], config["Market Data"]["closing_time"]
+        )
+        end -= bar_timedelta
+
+    formalized = pd.DataFrame(
+        symbol_data,
+        index=pd.date_range(start, end, freq=freq),
+        columns=(OPEN, HIGH, LOW, CLOSE, VOLUME),
+    )
+    formalized.index.name = DATETIME
+    formalized[VOLUME] = pd.to_numeric(
+        formalized[VOLUME], errors="coerce"
+    ).astype("Int64")
+
+    if config["Market Data"].getboolean("has_midday_break"):
+        if morning and not previous_with_data.empty:
+            start = create_timestamp(
+                previous_date, config["Market Data"]["closing_time"]
+            )
+            end = create_timestamp(
+                trade_data["entry_date"],
+                config["Market Data"]["opening_time"],
+            )
+            end -= bar_timedelta
+            exclusion = pd.date_range(start=start, end=end, freq=freq)
+            formalized = formalized.loc[~formalized.index.isin(exclusion)]
+        else:
+            start = create_timestamp(
+                trade_data["entry_date"],
+                config["Market Data"]["morning_session_end"],
+            )
+            end = create_timestamp(
+                trade_data["entry_date"],
+                config["Market Data"]["afternoon_session_start"],
+            )
+            end -= bar_timedelta
+            exclusion = pd.date_range(start=start, end=end, freq=freq)
+            formalized = formalized.loc[~formalized.index.isin(exclusion)]
+
+    return formalized
+
+
 def save_market_data(config, trade_data, market_data_path):
     """Save historical market data for a given symbol to a CSV file."""
     now = pd.Timestamp.now(tz=config["Market Data"]["timezone"])
@@ -600,120 +684,44 @@ def save_market_data(config, trade_data, market_data_path):
     )
     if refresh_decision is not RefreshDecision.NEED_REFRESH:
         return
-    else:
-        interval = "1m"
-        freq = INTERVALS[interval]["freq"]
-        bar_timedelta = pd.Timedelta(minutes=get_interval_minutes(interval))
+    interval = "1m"
+    freq = INTERVALS[interval]["freq"]
+    bar_timedelta = pd.Timedelta(minutes=get_interval_minutes(interval))
 
-        try:
-            symbol_data = yfinance.Ticker(
-                f"{trade_data['symbol']}"
-                f"{config['Market Data']['exchange_suffix']}"
-            ).history(
-                interval=interval,
-                period=f"{MARKET_DATA_PERIOD_IN_DAYS}d",
-            )
-        except Exception as e:
-            raise MarketDataError(
-                f"Unable to fetch market data for {trade_data['symbol']}: {e}"
-            ) from e
+    try:
+        symbol_data = yfinance.Ticker(
+            f"{trade_data['symbol']}"
+            f"{config['Market Data']['exchange_suffix']}"
+        ).history(
+            interval=interval,
+            period=f"{MARKET_DATA_PERIOD_IN_DAYS}d",
+        )
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to fetch market data for {trade_data['symbol']}: {e}"
+        ) from e
 
-        _validate_symbol_data(symbol_data, trade_data)
-        symbol_data[VOLUME] = pd.to_numeric(
-            symbol_data[VOLUME], errors="coerce"
+    formalized = _build_formalized_market_data(
+        config, trade_data, symbol_data, interval, freq, bar_timedelta
+    )
+
+    if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
+        raise MarketDataError(
+            f"Market data for {trade_data['symbol']} has no usable "
+            "OHLC rows after session filtering."
         )
 
-        volume_threshold = symbol_data[VOLUME].quantile(
-            float(config["Volume"]["quantile_threshold"])
+    try:
+        write_file_atomically(
+            market_data_path,
+            "w",
+            lambda f: formalized.to_csv(f),
+            newline="",
         )
-        if pd.notna(volume_threshold):
-            symbol_data[VOLUME] = symbol_data[VOLUME].clip(
-                upper=int(volume_threshold)
-            )
-        symbol_data[VOLUME] = symbol_data[VOLUME].astype("Int64")
-
-        previous = symbol_data[symbol_data.index < trade_data["entry_date"]]
-        previous_with_data = previous.dropna()
-        if not previous_with_data.empty:
-            previous_date = pd.Timestamp.date(
-                previous_with_data.tail(1).index[0]
-            )
-            previous_date = pd.Timestamp(
-                previous_date, tz=config["Market Data"]["timezone"]
-            )
-
-        morning = pd.Timedelta(str(trade_data["exit_time"])) < pd.Timedelta(
-            hours=12
-        )
-
-        if morning and not previous_with_data.empty:
-            start = create_timestamp(
-                previous_date, config["Market Data"]["afternoon_session_start"]
-            )
-            end = create_timestamp(
-                trade_data["entry_date"],
-                config["Market Data"]["morning_session_end"],
-            )
-            end -= bar_timedelta
-        else:
-            start = create_timestamp(
-                trade_data["entry_date"], config["Market Data"]["opening_time"]
-            )
-            end = create_timestamp(
-                trade_data["entry_date"], config["Market Data"]["closing_time"]
-            )
-            end -= bar_timedelta
-
-        formalized = pd.DataFrame(
-            symbol_data,
-            index=pd.date_range(start, end, freq=freq),
-            columns=(OPEN, HIGH, LOW, CLOSE, VOLUME),
-        )
-        formalized.index.name = DATETIME
-        formalized[VOLUME] = pd.to_numeric(
-            formalized[VOLUME], errors="coerce"
-        ).astype("Int64")
-
-        if morning and not previous_with_data.empty:
-            start = create_timestamp(
-                previous_date, config["Market Data"]["closing_time"]
-            )
-            end = create_timestamp(
-                trade_data["entry_date"], config["Market Data"]["opening_time"]
-            )
-            end -= bar_timedelta
-            exclusion = pd.date_range(start=start, end=end, freq=freq)
-            formalized = formalized.loc[~formalized.index.isin(exclusion)]
-        else:
-            start = create_timestamp(
-                trade_data["entry_date"],
-                config["Market Data"]["morning_session_end"],
-            )
-            end = create_timestamp(
-                trade_data["entry_date"],
-                config["Market Data"]["afternoon_session_start"],
-            )
-            end -= bar_timedelta
-            exclusion = pd.date_range(start=start, end=end, freq=freq)
-            formalized = formalized.loc[~formalized.index.isin(exclusion)]
-
-        if not formalized[[OPEN, HIGH, LOW, CLOSE]].notna().all(axis=1).any():
-            raise MarketDataError(
-                f"Market data for {trade_data['symbol']} has no usable "
-                "OHLC rows after session filtering."
-            )
-
-        try:
-            write_file_atomically(
-                market_data_path,
-                "w",
-                lambda f: formalized.to_csv(f),
-                newline="",
-            )
-        except Exception as e:
-            raise MarketDataError(
-                f"Unable to write market data to {market_data_path}: {e}"
-            ) from e
+    except Exception as e:
+        raise MarketDataError(
+            f"Unable to write market data to {market_data_path}: {e}"
+        ) from e
 
 
 def resample_ohlcv(config, df, interval):
@@ -736,20 +744,29 @@ def resample_ohlcv(config, df, interval):
 
     index = resampled.index
     trading_mask = np.zeros(len(index), dtype=bool)
-    trading_mask[
-        index.indexer_between_time(
-            config["Market Data"]["opening_time"],
-            config["Market Data"]["morning_session_end"],
-            include_end=False,
-        )
-    ] = True
-    trading_mask[
-        index.indexer_between_time(
-            config["Market Data"]["afternoon_session_start"],
-            config["Market Data"]["closing_time"],
-            include_end=False,
-        )
-    ] = True
+    if config["Market Data"].getboolean("has_midday_break"):
+        trading_mask[
+            index.indexer_between_time(
+                config["Market Data"]["opening_time"],
+                config["Market Data"]["morning_session_end"],
+                include_end=False,
+            )
+        ] = True
+        trading_mask[
+            index.indexer_between_time(
+                config["Market Data"]["afternoon_session_start"],
+                config["Market Data"]["closing_time"],
+                include_end=False,
+            )
+        ] = True
+    else:
+        trading_mask[
+            index.indexer_between_time(
+                config["Market Data"]["opening_time"],
+                config["Market Data"]["closing_time"],
+                include_end=False,
+            )
+        ] = True
     resampled = resampled.loc[trading_mask]
 
     return resampled

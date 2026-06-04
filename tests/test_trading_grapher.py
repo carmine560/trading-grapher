@@ -880,6 +880,33 @@ def test_resample_ohlcv_aggregates_and_drops_midday_break():
     assert pd.Timestamp("2024-01-02 12:30:00") in result.index
 
 
+def test_resample_ohlcv_preserves_midday_when_break_is_disabled():
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Market Data"]["has_midday_break"] = "False"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        "2024-01-02 12:34:00",
+        freq="min",
+    )
+    values = pd.Series(range(len(index)), index=index, dtype=float)
+    frame = pd.DataFrame(
+        {
+            tg.OPEN: values,
+            tg.HIGH: values + 1,
+            tg.LOW: values - 1,
+            tg.CLOSE: values + 0.5,
+            tg.VOLUME: 1,
+        },
+        index=index,
+    )
+
+    result = tg.resample_ohlcv(config, frame, "5m")
+
+    assert pd.Timestamp("2024-01-02 11:30:00") in result.index
+    assert pd.Timestamp("2024-01-02 12:25:00") in result.index
+    assert pd.Timestamp("2024-01-02 12:30:00") in result.index
+
+
 @pytest.mark.parametrize(
     ("entry_date", "last_bar_time", "modified_time", "now", "expected"),
     [
@@ -992,6 +1019,67 @@ def test_save_market_data_writes_session_filtered_csv(tmp_path, monkeypatch):
     assert real_timestamp("2024-01-02 12:29:00+09:00") not in saved.index
     assert real_timestamp("2024-01-02 12:30:00+09:00") in saved.index
     assert saved[tg.VOLUME].max() == 10
+
+
+def test_save_market_data_preserves_midday_when_break_is_disabled(
+    tmp_path,
+    monkeypatch,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Market Data"]["has_midday_break"] = "False"
+    config["Volume"]["quantile_threshold"] = "1.0"
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "2024-01-02-pm-1234.csv"
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        "2024-01-02 15:29:00",
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: 100.0,
+            tg.HIGH: 101.0,
+            tg.LOW: 99.0,
+            tg.CLOSE: 100.5,
+            tg.VOLUME: 10,
+        },
+        index=index,
+    )
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    real_timestamp = pd.Timestamp
+
+    class FakeTimestamp:
+        def __call__(self, *args, **kwargs):
+            return real_timestamp(*args, **kwargs)
+
+        @staticmethod
+        def now(tz=None):
+            return real_timestamp("2024-01-04 09:00:00", tz=tz)
+
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+    monkeypatch.setattr(tg.pd, "Timestamp", FakeTimestamp())
+
+    trade_data = {
+        "entry_date": real_timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+
+    assert real_timestamp("2024-01-02 11:30:00+09:00") in saved.index
+    assert real_timestamp("2024-01-02 12:29:00+09:00") in saved.index
+    assert real_timestamp("2024-01-02 12:30:00+09:00") in saved.index
 
 
 def test_save_market_data_write_failure_preserves_existing_cache(
