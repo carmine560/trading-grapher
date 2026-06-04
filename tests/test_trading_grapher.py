@@ -2271,6 +2271,53 @@ def test_prepare_parameters_ignores_rows_with_missing_volume():
     assert prices["opening"] == 0.0
 
 
+def test_prepare_parameters_sets_opening_without_prior_rows():
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    timezone = config["Market Data"]["timezone"]
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2024-01-02 09:00:00", tz=timezone),
+            pd.Timestamp("2024-01-02 09:01:00", tz=timezone),
+        ]
+    )
+    formalized = pd.DataFrame(
+        {
+            tg.OPEN: [101.0, 102.0],
+            tg.HIGH: [102.0, 103.0],
+            tg.LOW: [100.0, 101.0],
+            tg.CLOSE: [101.5, 102.5],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    )
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "entry_time": pd.NaT,
+        "entry_price": float("nan"),
+        "exit_time": pd.NaT,
+        "exit_price": float("nan"),
+    }
+    style = {
+        "rc": {"axes.edgecolor": "gray"},
+        "custom_style": {
+            "neutral_color": "gray",
+            "profit_color": "green",
+            "loss_color": "red",
+        },
+    }
+
+    _, prices, _ = tg._prepare_parameters(
+        config,
+        formalized,
+        trade_data,
+        result=0,
+        style=style,
+    )
+
+    assert prices["closing"] == 0.0
+    assert prices["opening"] == 101.0
+
+
 def test_get_x_returns_none_for_unmatched_timestamp():
     index = pd.date_range("2024-01-02 09:00:00", periods=2, freq="min")
 
