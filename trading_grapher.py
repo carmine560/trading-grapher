@@ -537,6 +537,13 @@ def _validate_trade_numeric_fields(trade_data, row_index):
             raise MarketDataError(
                 f"Trade row {row_index} has invalid {field}: {value}"
             ) from e
+        if field == "optional_number" and trade_data[field] != int(
+            trade_data[field]
+        ):
+            raise MarketDataError(
+                f"Trade row {row_index} has non-integer optional_number: "
+                f"{value}"
+            )
 
 
 def _validate_trade_data(trade_data, row_index):

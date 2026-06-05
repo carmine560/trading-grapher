@@ -1143,6 +1143,11 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "Trade row 0 has invalid optional_number: abc",
         ),
         (
+            "Number",
+            1.9,
+            "Trade row 0 has non-integer optional_number: 1.9",
+        ),
+        (
             "Entry price",
             "abc",
             "Trade row 0 has invalid entry_price: abc",
