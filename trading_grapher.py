@@ -197,7 +197,14 @@ def plot_trades_for_date(
 
         style_name = "fluorite"
         for option in config.options("Styles"):
-            key, value = evaluate_value(config["Styles"][option])
+            style_rule = evaluate_value(config["Styles"][option])
+            if not (isinstance(style_rule, tuple) and len(style_rule) == 2):
+                raise ConfigError(
+                    f"Invalid style rule for '{option}': "
+                    f"{config['Styles'][option]}. Expected a two-item "
+                    "tuple."
+                )
+            key, value = style_rule
             field_value = trade_data.get(key)
             if pd.isna(field_value):
                 continue

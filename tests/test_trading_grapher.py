@@ -492,6 +492,83 @@ def test_main_ignores_blank_optional_field_in_style_rule(
     assert imported_styles == ["styles.fluorite"]
 
 
+def test_main_exits_cleanly_on_malformed_style_rule(
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
+    config["Styles"]["amber"] = "not a tuple"
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(
+        tg,
+        "save_market_data",
+        lambda *args, **kwargs: pytest.fail(
+            "market data should not be saved for malformed style config"
+        ),
+    )
+    monkeypatch.setattr(
+        tg,
+        "plot_charts",
+        lambda *args, **kwargs: pytest.fail(
+            "charts should not be plotted for malformed style config"
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert "Invalid style rule for 'amber': not a tuple" in captured.out
+    assert "Expected a two-item tuple." in captured.out
+    assert "Traceback" not in captured.err
+
+
 def test_main_creates_missing_charts_directory_before_writing_outputs(
     tmp_path,
     monkeypatch,
