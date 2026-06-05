@@ -201,15 +201,20 @@ def plot_trades_for_date(
             if not (isinstance(style_rule, tuple) and len(style_rule) == 2):
                 raise ConfigError(
                     f"Invalid style rule for '{option}': "
-                    f"{config['Styles'][option]}. Expected a two-item "
-                    "tuple."
+                    f"{config['Styles'][option]}. Expected a two-item tuple."
                 )
             key, value = style_rule
-            field_value = trade_data.get(key)
-            if pd.isna(field_value):
-                continue
-            if str(value) in str(field_value):
-                style_name = option
+            field_values = (
+                trade_data.values() if key == "any" else (trade_data.get(key),)
+            )
+            for field_value in field_values:
+                if pd.isna(field_value):
+                    continue
+                if str(value) in str(field_value):
+                    style_name = option
+                    break
+            # Stop scanning styles once a match has been selected.
+            if style_name == option:
                 break
 
         try:
