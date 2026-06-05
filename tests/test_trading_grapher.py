@@ -1133,6 +1133,11 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "Trade row 0 has empty order_specification.",
         ),
         (
+            "Order specification",
+            "sideways",
+            "Trade row 0 has unsupported order_specification: sideways",
+        ),
+        (
             "Number",
             "abc",
             "Trade row 0 has invalid optional_number: abc",

@@ -555,6 +555,12 @@ def _validate_trade_data(trade_data, row_index):
         raise MarketDataError(
             f"Trade row {row_index} has empty order_specification."
         )
+    normalized_order = trade_data["order_specification"].lower()
+    if ("long" in normalized_order) == ("short" in normalized_order):
+        raise MarketDataError(
+            f"Trade row {row_index} has unsupported order_specification: "
+            f"{trade_data['order_specification']}"
+        )
 
     _validate_trade_numeric_fields(trade_data, row_index)
     _validate_trade_time(trade_data, row_index, "entry_time")
