@@ -513,6 +513,11 @@ def _validate_trade_time(trade_data, row_index, field_name):
             f"Trade row {row_index} has invalid {field_name}: "
             f"{trade_data[field_name]}"
         ) from e
+    if time_value < pd.Timedelta(0) or time_value >= pd.Timedelta(days=1):
+        raise MarketDataError(
+            f"Trade row {row_index} has out-of-range {field_name}: "
+            f"{trade_data[field_name]}"
+        )
     trade_data[field_name] = (pd.Timestamp("1970-01-01") + time_value).time()
 
 

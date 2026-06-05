@@ -1178,11 +1178,21 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "abc",
             "Trade row 0 has invalid entry_time: abc",
         ),
+        (
+            "Entry time",
+            "-01:00:00",
+            "Trade row 0 has out-of-range entry_time: -01:00:00",
+        ),
         ("Exit time", pd.NaT, "Trade row 0 is missing exit_time."),
         (
             "Exit time",
             "abc",
             "Trade row 0 has invalid exit_time: abc",
+        ),
+        (
+            "Exit time",
+            "25:00:00",
+            "Trade row 0 has out-of-range exit_time: 25:00:00",
         ),
     ],
 )
