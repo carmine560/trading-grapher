@@ -713,38 +713,49 @@ def _build_formalized_market_data(
     return formalized
 
 
-def save_market_data(config, trade_data, market_data_path):
-    """Save historical market data for a given symbol to a CSV file."""
-    now = pd.Timestamp.now(tz=config["Market Data"]["timezone"])
+def _read_cached_market_data_state(config, market_data_path):
+    """Return cache timestamps and any recoverable cache read failure."""
     last_bar_time = modified_time = pd.Timestamp(
         0, tz=config["Market Data"]["timezone"]
     )
-    if os.path.isfile(market_data_path):
-        try:
-            formalized = pd.read_csv(
-                market_data_path, index_col=0, parse_dates=True
-            )
-            required_columns = set(OHLCV_COLUMNS)
-            missing_columns = required_columns.difference(formalized.columns)
-            if missing_columns:
-                missing_text = ", ".join(sorted(missing_columns))
-                raise MarketDataError(
-                    f"Cached market data from {market_data_path} "
-                    f"is missing columns: {missing_text}"
-                )
-            last_bar_time = formalized.tail(1).index[0]
-        except MarketDataError:
-            raise
-        except Exception as e:
-            raise MarketDataError(
-                f"Unable to read cached market data from "
-                f"{market_data_path}: {e}"
-            ) from e
-        modified_time = pd.Timestamp(
-            os.path.getmtime(market_data_path),
-            tz=config["Market Data"]["timezone"],
-            unit="s",
+    if not os.path.isfile(market_data_path):
+        return last_bar_time, modified_time, None
+
+    modified_time = pd.Timestamp(
+        os.path.getmtime(market_data_path),
+        tz=config["Market Data"]["timezone"],
+        unit="s",
+    )
+    try:
+        formalized = pd.read_csv(
+            market_data_path, index_col=0, parse_dates=True
         )
+        required_columns = set(OHLCV_COLUMNS)
+        missing_columns = required_columns.difference(formalized.columns)
+        if missing_columns:
+            missing_text = ", ".join(sorted(missing_columns))
+            raise MarketDataError(
+                f"Cached market data from {market_data_path} "
+                f"is missing columns: {missing_text}"
+            )
+        last_bar_time = formalized.tail(1).index[0]
+    except MarketDataError:
+        raise
+    except Exception as e:
+        cache_read_error = MarketDataError(
+            f"Unable to read cached market data from {market_data_path}: {e}"
+        )
+        return last_bar_time, modified_time, cache_read_error
+
+    return last_bar_time, modified_time, None
+
+
+def save_market_data(config, trade_data, market_data_path):
+    """Save historical market data for a given symbol to a CSV file."""
+    now = pd.Timestamp.now(tz=config["Market Data"]["timezone"])
+    last_bar_time, modified_time, cache_read_error = (
+        _read_cached_market_data_state(config, market_data_path)
+    )
 
     refresh_decision = determine_market_data_refresh_decision(
         trade_data["entry_date"],
@@ -754,6 +765,10 @@ def save_market_data(config, trade_data, market_data_path):
         int(config["Market Data"]["delay"]),
         MARKET_DATA_PERIOD_IN_DAYS,
     )
+    if cache_read_error is not None:
+        if refresh_decision is RefreshDecision.OUT_OF_RANGE:
+            raise cache_read_error
+        refresh_decision = RefreshDecision.NEED_REFRESH
     if refresh_decision is not RefreshDecision.NEED_REFRESH:
         if (
             refresh_decision is RefreshDecision.OUT_OF_RANGE

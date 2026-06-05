@@ -1614,14 +1614,80 @@ def test_save_market_data_reports_out_of_range_missing_cache(
         f"{tg.DATETIME},{tg.OPEN},{tg.HIGH},{tg.LOW},{tg.CLOSE},{tg.VOLUME}\n",
     ],
 )
-def test_save_market_data_reports_unreadable_cached_csv(
+def test_save_market_data_replaces_refreshable_unreadable_cached_csv(
     tmp_path,
+    monkeypatch,
+    csv_content,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["Volume"]["quantile_threshold"] = "1.0"
+    timezone = config["Market Data"]["timezone"]
+    market_data_path = tmp_path / "bad-cache.csv"
+    market_data_path.write_text(csv_content, encoding="utf-8")
+    index = pd.date_range(
+        "2024-01-02 09:00:00",
+        periods=2,
+        freq="min",
+        tz=timezone,
+    )
+    symbol_data = pd.DataFrame(
+        {
+            tg.OPEN: [100.0, 101.0],
+            tg.HIGH: [101.0, 102.0],
+            tg.LOW: [99.0, 100.0],
+            tg.CLOSE: [100.5, 101.5],
+            tg.VOLUME: [10, 20],
+        },
+        index=index,
+    )
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def history(self, interval, period):
+            return symbol_data
+
+    monkeypatch.setattr(tg.yfinance, "Ticker", FakeTicker)
+    monkeypatch.setattr(
+        tg,
+        "determine_market_data_refresh_decision",
+        lambda *args: tg.RefreshDecision.COOLDOWN,
+    )
+    trade_data = {
+        "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
+        "exit_time": "13:00:00",
+        "symbol": "1234",
+    }
+
+    tg.save_market_data(config, trade_data, str(market_data_path))
+
+    saved = pd.read_csv(market_data_path, index_col=0, parse_dates=True)
+    assert saved[tg.OPEN].dropna().tolist() == [100.0, 101.0]
+    assert saved[tg.VOLUME].dropna().tolist() == [10, 20]
+
+
+@pytest.mark.parametrize(
+    "csv_content",
+    [
+        "",
+        f"{tg.DATETIME},{tg.OPEN},{tg.HIGH},{tg.LOW},{tg.CLOSE},{tg.VOLUME}\n",
+    ],
+)
+def test_save_market_data_reports_out_of_range_unreadable_cached_csv(
+    tmp_path,
+    monkeypatch,
     csv_content,
 ):
     config = tg.configure("/tmp/not-used.ini", can_override=False)
     timezone = config["Market Data"]["timezone"]
     market_data_path = tmp_path / "bad-cache.csv"
     market_data_path.write_text(csv_content, encoding="utf-8")
+    monkeypatch.setattr(
+        tg,
+        "determine_market_data_refresh_decision",
+        lambda *args: tg.RefreshDecision.OUT_OF_RANGE,
+    )
     trade_data = {
         "entry_date": pd.Timestamp("2024-01-02 00:00:00", tz=timezone),
         "exit_time": "13:00:00",
