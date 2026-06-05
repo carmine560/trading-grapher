@@ -505,7 +505,7 @@ def _validate_trade_time(trade_data, row_index, field_name):
 
 
 def _validate_trade_numeric_fields(trade_data, row_index):
-    """Normalize and validate optional numeric trade fields."""
+    """Normalize and validate numeric trade fields."""
     for field in (
         "optional_number",
         "entry_price",
@@ -514,6 +514,10 @@ def _validate_trade_numeric_fields(trade_data, row_index):
     ):
         value = trade_data.get(field)
         if pd.isna(value):
+            if field in ("entry_price", "exit_price"):
+                raise MarketDataError(
+                    f"Trade row {row_index} is missing {field}."
+                )
             continue
         try:
             trade_data[field] = pd.to_numeric(value)

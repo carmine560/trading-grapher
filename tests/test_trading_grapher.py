@@ -997,9 +997,19 @@ def test_validate_trade_data_rejects_bad_entry_date(value, message):
             "Trade row 0 has invalid entry_price: abc",
         ),
         (
+            "Entry price",
+            float("nan"),
+            "Trade row 0 is missing entry_price.",
+        ),
+        (
             "Exit price",
             "abc",
             "Trade row 0 has invalid exit_price: abc",
+        ),
+        (
+            "Exit price",
+            float("nan"),
+            "Trade row 0 is missing exit_price.",
         ),
         (
             "Percentage change",
@@ -1088,13 +1098,99 @@ def test_main_validates_trade_rows_before_processing(
     assert message in captured.out
 
 
+@pytest.mark.parametrize(
+    ("config_key", "message"),
+    [
+        ("entry_price", "Trade row 0 is missing entry_price."),
+        ("exit_price", "Trade row 0 is missing exit_price."),
+    ],
+)
+def test_main_rejects_missing_mapped_price_columns_before_processing(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    config_key,
+    message,
+):
+    config = tg.configure("/tmp/not-used.ini", can_override=False)
+    config["General"]["charts_directory"] = str(tmp_path)
+    config["Trading Journal"][config_key] = "Missing price column"
+    journal = pd.DataFrame(
+        {
+            "Entry date": [pd.Timestamp("2024-01-02")],
+            "Entry time": [pd.Timestamp("2024-01-02 09:00:00").time()],
+            "Symbol": ["1234"],
+            "Order specification": ["long"],
+            "Entry price": [100.0],
+            "Exit time": [pd.Timestamp("2024-01-02 13:00:00").time()],
+            "Exit price": [101.0],
+        }
+    )
+
+    monkeypatch.setattr(
+        tg,
+        "get_arguments",
+        lambda: SimpleNamespace(
+            f=None,
+            d=None,
+            i=None,
+            dates=["2024-01-02"],
+            G=False,
+            J=False,
+            I=False,
+            S=False,
+            C=False,
+        ),
+    )
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "get_config_path",
+        lambda _: "/tmp/x",
+    )
+    monkeypatch.setattr(tg, "configure", lambda _: config)
+    monkeypatch.setattr(
+        tg.file_utilities,
+        "create_launchers_exit",
+        lambda args, script_path: None,
+    )
+    monkeypatch.setattr(
+        tg,
+        "configure_exit",
+        lambda args, config_path, trading_path, trading_sheet: None,
+    )
+    monkeypatch.setattr(tg.pd, "read_excel", lambda *args, **kwargs: journal)
+    monkeypatch.setattr(
+        tg,
+        "save_market_data",
+        lambda *args, **kwargs: pytest.fail(
+            "market data should not be saved for invalid price data"
+        ),
+    )
+    monkeypatch.setattr(
+        tg,
+        "plot_charts",
+        lambda *args, **kwargs: pytest.fail(
+            "charts should not be plotted for invalid price data"
+        ),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        tg.main()
+
+    assert excinfo.value.code == 1
+    captured = capsys.readouterr()
+    assert message in captured.out
+
+
 def test_validate_trade_data_normalizes_time_strings():
     trade_data = {
         "entry_date": pd.Timestamp("2024-01-02"),
         "entry_time": "09:00:00",
         "symbol": "1234",
         "order_specification": "long",
+        "entry_price": 100.0,
         "exit_time": "13:00:00",
+        "exit_price": 101.0,
     }
 
     tg._validate_trade_data(trade_data, 0)
