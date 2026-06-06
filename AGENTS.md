@@ -10,6 +10,3 @@
     missing OHLCV rows as a freshness signal unless the repository already
     does so. Sparse OHLCV data can be a normal market condition here, and
     related suggestions need direct evidence from the current code and tests.
-  * Do not recommend adding CI workflows, tracked test runners, or other
-    repository-external automation unless explicitly requested or already
-    implemented in the current repository state.
