@@ -204,17 +204,20 @@ def plot_trades_for_date(
                     f"{config['Styles'][option]}. Expected a two-item tuple."
                 )
             key, value = style_rule
+            if key == "" and value == "":
+                continue
             field_values = (
                 trade_data.values() if key == "any" else (trade_data.get(key),)
             )
+            matched = False
             for field_value in field_values:
                 if pd.isna(field_value):
                     continue
                 if str(value) in str(field_value):
                     style_name = option
+                    matched = True
                     break
-            # Stop scanning styles once a match has been selected.
-            if style_name == option:
+            if matched:
                 break
 
         try:
