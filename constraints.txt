@@ -1,5 +1,7 @@
 mplfinance==0.12.10b0
+numpy==2.3.4
 odfpy==1.4.1
+pandas==2.3.3
 prompt_toolkit==3.0.52
 yfinance==1.4.1
 pytest==9.0.3

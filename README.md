@@ -15,8 +15,12 @@ the following packages:
 
   * [`mplfinance`](https://github.com/matplotlib/mplfinance) to plot trade data
     and the indicators based on historical data
+  * [`numpy`](https://github.com/numpy/numpy) to calculate and prepare
+    indicator and chart data
   * [`odfpy`](https://github.com/eea/odfpy) to read the trading journal
     recorded in an OpenDocument Spreadsheet file
+  * [`pandas`](https://github.com/pandas-dev/pandas) to read and process
+    trading journal and historical data
   * [`prompt_toolkit`](https://github.com/prompt-toolkit/python-prompt-toolkit)
     to complete possible values or a previous value in configuring
   * [`yfinance`](https://github.com/ranaroussi/yfinance) to retrieve historical
