@@ -1386,7 +1386,7 @@ def add_axis_ticks(config, axlist, style, interval, stochastics_panel):
     """Add chart x-axis ticks and stochastic panel y-axis reference ticks."""
     minutes = get_interval_minutes(interval)
     major_tick_step = 30 / minutes
-    minor_tick_step = 10 / minutes
+    minor_tick_step = 15 / minutes
     axlist[0].set_xticks(np.arange(*axlist[0].get_xlim(), major_tick_step))
     if config["Minor X-ticks"].getboolean("is_added"):
         add_minor_xticks(

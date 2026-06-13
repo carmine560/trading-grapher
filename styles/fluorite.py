@@ -44,7 +44,7 @@ style = {
         "line_alpha": 0.4,
         "filled_area_alpha": 0.04,
         "active_trading_hours_color": "#1b1b1b",
-        "minor_grid_alpha": 0.2,
+        "minor_grid_alpha": 0.4,
         "tooltip_color": "black",
         "tooltip_bbox_alpha": 0.6,
         "text_bbox_alpha": 0.5,
