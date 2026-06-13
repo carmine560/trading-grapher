@@ -143,7 +143,7 @@ def main():
                 interval,
             )
 
-        if has_plotted:
+        if not args.d and has_plotted:
             report_chart_directory_discrepancies(
                 config,
                 trading_journal,
