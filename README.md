@@ -75,7 +75,7 @@ Then, execute:
   * `-d DIRECTORY`: specify the directory path for storing historical data and
     charts
   * `-i INTERVAL`: specify the bar interval for chart rendering
-  * `-BS`: save a Bash script to `$HOME/Downloads` to launch this script and
+  * `-BS [OUTPUT_DIRECTORY]`: generate a Bash script to launch this script and
     exit
   * `-G`: configure general options and exit
   * `-J`: configure the columns of the trading journal and exit
