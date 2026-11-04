@@ -13,8 +13,9 @@ Finance](https://finance.yahoo.com/).
 `trading_grapher.py` has been tested on Debian Testing on WSL 2 and requires
 the following packages:
 
-  * [`mplfinance`](https://github.com/matplotlib/mplfinance) to plot trade data
-    and the indicators based on historical data
+  * [`mplfinance`](https://github.com/matplotlib/mplfinance) and
+    [`six`](https://github.com/benjaminp/six) to plot trade data and the
+    indicators based on historical data
   * [`numpy`](https://github.com/numpy/numpy) to calculate and prepare
     indicator and chart data
   * [`odfpy`](https://github.com/eea/odfpy) to read the trading journal
